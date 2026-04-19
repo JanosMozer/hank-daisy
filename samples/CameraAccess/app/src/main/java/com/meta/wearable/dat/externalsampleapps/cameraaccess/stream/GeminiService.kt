@@ -12,6 +12,8 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,14 +22,19 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.util.concurrent.TimeUnit
 
+/**
+ * Vision LLM client. Talks to OpenRouter (OpenAI-compatible chat/completions
+ * endpoint) so we can pick any vision-capable model without re-coding the
+ * transport. Class name kept as GeminiService for blast-radius reasons.
+ */
 class GeminiService {
 
     companion object {
         private const val TAG = "CameraAccess:GeminiService"
-        private const val API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        private const val API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+        private const val MODEL = "google/gemini-3.1-flash-lite-preview"
 
         private const val SYSTEM_PROMPT = """You are Hank, an expert automotive diagnostic assistant built into smart glasses worn by mechanics and car owners. You see exactly what they see through the glasses camera.
 
@@ -51,83 +58,117 @@ Style rules:
 - SAFETY FIRST — if something is dangerous, lead with that warning"""
     }
 
-    private val apiKey: String = BuildConfig.GEMINI_API_KEY
+    private val apiKey: String = BuildConfig.OPENROUTER_API_KEY
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client =
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
 
-    private fun bitmapToBase64(bitmap: Bitmap): String {
+    private fun bitmapToDataUrl(bitmap: Bitmap): String {
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-        return Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+        val b64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+        return "data:image/jpeg;base64,$b64"
     }
 
     suspend fun analyzeFrame(
         bitmap: Bitmap,
-        userQuestion: String = "What do you see? Identify any problems and tell me how to fix them step by step."
+        userQuestion: String =
+            "What do you see? Identify any problems and tell me how to fix them step by step.",
     ): String {
         if (apiKey.isBlank()) {
-            return "Gemini API key not configured. Add gemini_api_key to local.properties."
+            return "OpenRouter API key not configured. Add openrouter_api_key to local.properties."
         }
 
         return withContext(Dispatchers.IO) {
             try {
-                val base64Image = bitmapToBase64(bitmap)
+                val imageDataUrl = bitmapToDataUrl(bitmap)
 
-                val requestBody = JSONObject().apply {
-                    put("system_instruction", JSONObject().apply {
-                        put("parts", JSONArray().apply {
-                            put(JSONObject().apply { put("text", SYSTEM_PROMPT) })
-                        })
-                    })
-                    put("contents", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("parts", JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("inline_data", JSONObject().apply {
-                                        put("mime_type", "image/jpeg")
-                                        put("data", base64Image)
-                                    })
-                                })
-                                put(JSONObject().apply { put("text", userQuestion) })
-                            })
-                        })
-                    })
-                    put("generationConfig", JSONObject().apply {
-                        put("temperature", 0.4)
-                        put("maxOutputTokens", 800)
-                    })
-                }.toString()
+                val requestBody =
+                    JSONObject()
+                        .apply {
+                            put("model", MODEL)
+                            put(
+                                "messages",
+                                JSONArray().apply {
+                                    put(
+                                        JSONObject().apply {
+                                            put("role", "system")
+                                            put("content", SYSTEM_PROMPT)
+                                        },
+                                    )
+                                    put(
+                                        JSONObject().apply {
+                                            put("role", "user")
+                                            put(
+                                                "content",
+                                                JSONArray().apply {
+                                                    put(
+                                                        JSONObject().apply {
+                                                            put("type", "text")
+                                                            put("text", userQuestion)
+                                                        },
+                                                    )
+                                                    put(
+                                                        JSONObject().apply {
+                                                            put("type", "image_url")
+                                                            put(
+                                                                "image_url",
+                                                                JSONObject().apply {
+                                                                    put("url", imageDataUrl)
+                                                                },
+                                                            )
+                                                        },
+                                                    )
+                                                },
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                            put("max_tokens", 800)
+                            put("temperature", 0.4)
+                        }
+                        .toString()
 
-                val request = Request.Builder()
-                    .url("$API_URL?key=$apiKey")
-                    .post(requestBody.toRequestBody("application/json".toMediaType()))
-                    .build()
+                val request =
+                    Request.Builder()
+                        .url(API_URL)
+                        .addHeader("Authorization", "Bearer $apiKey")
+                        .addHeader("Content-Type", "application/json")
+                        .addHeader("HTTP-Referer", "https://github.com/JanosMozer/hank-daisy")
+                        .addHeader("X-Title", "Hank")
+                        .post(requestBody.toRequestBody("application/json".toMediaType()))
+                        .build()
 
                 val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: return@withContext "No response from Gemini."
+                val body = response.body?.string() ?: return@withContext "No response from Hank."
 
                 if (!response.isSuccessful) {
-                    Log.e(TAG, "Gemini API error ${response.code}: $body")
-                    return@withContext "Error: Gemini API returned ${response.code}"
+                    Log.e(TAG, "OpenRouter API error ${response.code}: $body")
+                    return@withContext when (response.code) {
+                        401, 403 ->
+                            "Hank's API key is invalid or unauthorized. Check openrouter_api_key in local.properties."
+                        429 -> "I'm getting too many requests right now. Try again in a moment."
+                        in 500..599 -> "Hank's brain is offline. Try again in a moment."
+                        else -> "Error talking to Hank (HTTP ${response.code})."
+                    }
                 }
 
                 val json = JSONObject(body)
-                val candidates = json.optJSONArray("candidates")
-                val text = candidates
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts")
-                    ?.optJSONObject(0)
-                    ?.optString("text")
+                val text =
+                    json.optJSONArray("choices")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("message")
+                        ?.optString("content")
 
-                text ?: "No response from Gemini."
+                if (text.isNullOrBlank()) "No response from Hank." else text
             } catch (e: Exception) {
-                Log.e(TAG, "Gemini analysis failed", e)
-                "Error: ${e.message}"
+                Log.e(TAG, "OpenRouter call failed", e)
+                "Couldn't reach Hank: ${e.message}"
             }
         }
     }

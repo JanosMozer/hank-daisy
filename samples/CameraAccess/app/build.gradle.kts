@@ -41,7 +41,11 @@ android {
     // in Wearables Developer Center
     manifestPlaceholders["mwdat_application_id"] = localProps.getProperty("mwdat_application_id", "")
     manifestPlaceholders["mwdat_client_token"] = localProps.getProperty("mwdat_client_token", "")
-    buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("gemini_api_key", "")}\"")
+    buildConfigField(
+        "String",
+        "OPENROUTER_API_KEY",
+        "\"${localProps.getProperty("openrouter_api_key", "")}\"",
+    )
   }
 
   buildTypes {
