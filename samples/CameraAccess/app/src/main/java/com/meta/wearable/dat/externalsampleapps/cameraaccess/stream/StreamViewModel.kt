@@ -89,6 +89,10 @@ class StreamViewModel(
   private var presentationQueue: PresentationQueue? = null
 
   fun startStream() {
+    if (session != null && videoJob != null) {
+      Log.d(TAG, "startStream() called while already streaming — ignoring")
+      return
+    }
     videoJob?.cancel()
     stateJob?.cancel()
     errorJob?.cancel()

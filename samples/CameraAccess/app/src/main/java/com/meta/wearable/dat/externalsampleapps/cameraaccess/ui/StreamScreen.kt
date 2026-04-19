@@ -33,7 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -69,7 +69,10 @@ fun StreamScreen(
 ) {
   val streamUiState by streamViewModel.uiState.collectAsStateWithLifecycle()
 
-  LaunchedEffect(Unit) { streamViewModel.startStream() }
+  DisposableEffect(Unit) {
+    streamViewModel.startStream()
+    onDispose { streamViewModel.stopStream() }
+  }
 
   Box(modifier = modifier.fillMaxSize()) {
     streamUiState.videoFrame?.let { videoFrame ->
