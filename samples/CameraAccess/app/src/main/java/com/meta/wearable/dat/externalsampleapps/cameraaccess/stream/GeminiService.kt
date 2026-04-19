@@ -10,10 +10,11 @@ package com.meta.wearable.dat.externalsampleapps.cameraaccess.stream
 
 import android.graphics.Bitmap
 import android.util.Log
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
-import com.google.ai.client.generativeai.type.generationConfig
+import com.google.genai.Client
+import com.google.genai.types.GenerateContentConfig
+import com.google.genai.types.Part
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
+import java.io.ByteArrayOutputStream
 
 class GeminiService {
 
@@ -37,38 +38,42 @@ Rules:
 - Always prioritize SAFETY — if something looks dangerous, say so immediately"""
     }
 
-    private val model: GenerativeModel? = run {
+    private val client: Client? = run {
         val apiKey = BuildConfig.GEMINI_API_KEY
         if (apiKey.isBlank()) {
             Log.w(TAG, "Gemini API key not set in local.properties")
             null
         } else {
-            GenerativeModel(
-                modelName = "gemini-2.0-flash",
-                apiKey = apiKey,
-                generationConfig = generationConfig {
-                    temperature = 0.4f
-                    maxOutputTokens = 150
-                },
-                systemInstruction = content { text(SYSTEM_PROMPT) },
-            )
+            Client(apiKey = apiKey)
         }
+    }
+
+    private fun bitmapToBytes(bitmap: Bitmap): ByteArray {
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+        return stream.toByteArray()
     }
 
     suspend fun analyzeFrame(
         bitmap: Bitmap,
         prompt: String = "What do you see? Identify any car problems and tell me the fix."
     ): String {
-        if (model == null) {
+        if (client == null) {
             return "Gemini API key not configured. Add gemini_api_key to local.properties."
         }
 
         return try {
-            val response = model.generateContent(
-                content {
-                    image(bitmap)
-                    text(prompt)
-                }
+            val imageBytes = bitmapToBytes(bitmap)
+            val imagePart = Part.fromBytes(imageBytes, "image/jpeg")
+
+            val response = client.models.generateContent(
+                model = "gemini-2.0-flash",
+                contents = listOf(imagePart, prompt),
+                config = GenerateContentConfig(
+                    temperature = 0.4f,
+                    maxOutputTokens = 150,
+                    systemInstruction = SYSTEM_PROMPT,
+                ),
             )
             response.text ?: "No response from Gemini."
         } catch (e: Exception) {
