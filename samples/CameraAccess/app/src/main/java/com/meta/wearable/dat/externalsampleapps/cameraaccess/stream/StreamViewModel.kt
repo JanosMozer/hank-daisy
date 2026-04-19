@@ -135,16 +135,34 @@ class StreamViewModel(
     presentationQueue = queue
     queue.start()
     if (session == null) {
-      Wearables.createSession(deviceSelector)
-          .onSuccess { createdSession ->
-            session = createdSession
-            session?.start()
-          }
-          .onFailure { error, _ -> Log.e(TAG, "Failed to create session: ${error.description}") }
+      try {
+        Wearables.createSession(deviceSelector)
+            .onSuccess { createdSession ->
+              session = createdSession
+              try {
+                session?.start()
+              } catch (e: Exception) {
+                Log.e(TAG, "session?.start() failed", e)
+              }
+            }
+            .onFailure { error, _ ->
+              Log.e(TAG, "Failed to create session: ${error.description}")
+            }
+      } catch (e: Exception) {
+        Log.e(TAG, "createSession threw", e)
+      }
       if (session == null) return
     }
-    liveStreamServer.start()
-    StreamForegroundService.start(getApplication())
+    try {
+      liveStreamServer.start()
+    } catch (e: Exception) {
+      Log.w(TAG, "liveStreamServer.start() failed (continuing)", e)
+    }
+    try {
+      StreamForegroundService.start(getApplication())
+    } catch (e: Exception) {
+      Log.w(TAG, "StreamForegroundService.start() failed (continuing)", e)
+    }
     glassesAudio.enableGlassesMic()
     observeGlassesAudio()
     observeTtsSpeaking()
@@ -175,66 +193,92 @@ class StreamViewModel(
   private fun startStreamInternal() {
     Log.d(TAG, "startStreamInternal() - collecting session state")
     sessionStateJob =
-        viewModelScope.launch {
+        safeLaunch("sessionState") {
           session?.state?.collect { currentState ->
             if (currentState == DeviceSessionState.STARTED) {
               videoJob?.cancel()
               stateJob?.cancel()
               errorJob?.cancel()
-              stream?.stop()
+              try {
+                stream?.stop()
+              } catch (e: Exception) {
+                Log.w(TAG, "stream?.stop() before re-add failed", e)
+              }
               stream = null
-              session
-                  ?.addStream(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, 24))
-                  ?.onSuccess { addedStream ->
-                    stream = addedStream
-                    videoJob =
-                        viewModelScope.launch {
-                          Log.d(TAG, "Collecting video frames from stream")
-                          stream?.videoStream?.collect { handleVideoFrame(it) }
-                          Log.d(TAG, "Video stream collection ended")
-                        }
-                    stateJob =
-                        viewModelScope.launch {
-                          stream?.state?.collect { currentState ->
-                            val prevState = _uiState.value.streamSessionState
-                            Log.d(TAG, "Stream state changed: $prevState -> $currentState")
-                            _uiState.update { it.copy(streamSessionState = currentState) }
+              try {
+                session
+                    ?.addStream(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, 24))
+                    ?.onSuccess { addedStream ->
+                      stream = addedStream
+                      videoJob =
+                          safeLaunch("videoStream") {
+                            Log.d(TAG, "Collecting video frames from stream")
+                            stream?.videoStream?.collect { handleVideoFrame(it) }
+                            Log.d(TAG, "Video stream collection ended")
+                          }
+                      stateJob =
+                          safeLaunch("streamState") {
+                            stream?.state?.collect { currentState ->
+                              val prevState = _uiState.value.streamSessionState
+                              Log.d(TAG, "Stream state changed: $prevState -> $currentState")
+                              _uiState.update { it.copy(streamSessionState = currentState) }
 
-                            val wasActive = prevState !in SESSION_TERMINAL_STATES
-                            val isTerminated = currentState in SESSION_TERMINAL_STATES
-                            if (wasActive && isTerminated) {
-                              Log.d(TAG, "Terminal state reached, navigating back")
-                              stopStream()
-                              wearablesViewModel.navigateToDeviceSelection()
+                              val wasActive = prevState !in SESSION_TERMINAL_STATES
+                              val isTerminated = currentState in SESSION_TERMINAL_STATES
+                              if (wasActive && isTerminated) {
+                                Log.d(TAG, "Terminal state reached, navigating back")
+                                stopStream()
+                                wearablesViewModel.navigateToDeviceSelection()
+                              }
                             }
                           }
-                        }
-                    errorJob =
-                        viewModelScope.launch {
-                          stream?.errorStream?.collect { error ->
-                            Log.d(
-                                TAG,
-                                "Stream error received: $error (description: ${error.description})",
-                            )
-                            if (error == StreamError.HINGE_CLOSED) {
+                      errorJob =
+                          safeLaunch("errorStream") {
+                            stream?.errorStream?.collect { error ->
                               Log.d(
                                   TAG,
-                                  "HINGE_CLOSED detected, stopping stream and navigating back",
+                                  "Stream error received: $error (description: ${error.description})",
                               )
-                              stopStream()
-                              wearablesViewModel.navigateToDeviceSelection()
+                              if (error == StreamError.HINGE_CLOSED) {
+                                Log.d(
+                                    TAG,
+                                    "HINGE_CLOSED detected, stopping stream and navigating back",
+                                )
+                                stopStream()
+                                wearablesViewModel.navigateToDeviceSelection()
+                              }
                             }
                           }
-                        }
-                    stream?.start()
-                  }
-                  ?.onFailure { error, _ ->
-                    Log.e(TAG, "Failed to add stream to session: ${error.description}")
-                  }
+                      try {
+                        stream?.start()
+                      } catch (e: Exception) {
+                        Log.e(TAG, "stream?.start() failed", e)
+                        stopStream()
+                      }
+                    }
+                    ?.onFailure { error, _ ->
+                      Log.e(TAG, "Failed to add stream to session: ${error.description}")
+                    }
+              } catch (e: Exception) {
+                Log.e(TAG, "addStream threw", e)
+                stopStream()
+              }
             }
           }
         }
   }
+
+  /** viewModelScope.launch + try/catch so an exception in any collect doesn't kill the process. */
+  private fun safeLaunch(label: String, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): Job =
+      viewModelScope.launch {
+        try {
+          block()
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+          throw ce
+        } catch (e: Exception) {
+          Log.e(TAG, "Coroutine [$label] crashed (swallowed)", e)
+        }
+      }
 
   fun stopStream() {
     if (session == null && videoJob == null && teardownJob == null) {
@@ -242,29 +286,29 @@ class StreamViewModel(
     }
     val sessionToTearDown = session
     session = null
-    videoJob?.cancel()
+    try { videoJob?.cancel() } catch (_: Exception) {}
     videoJob = null
-    stateJob?.cancel()
+    try { stateJob?.cancel() } catch (_: Exception) {}
     stateJob = null
-    errorJob?.cancel()
+    try { errorJob?.cancel() } catch (_: Exception) {}
     errorJob = null
-    sessionStateJob?.cancel()
+    try { sessionStateJob?.cancel() } catch (_: Exception) {}
     sessionStateJob = null
-    presentationQueue?.stop()
+    try { presentationQueue?.stop() } catch (_: Exception) {}
     presentationQueue = null
     _uiState.update { INITIAL_STATE }
-    stream?.stop()
+    try { stream?.stop() } catch (e: Exception) { Log.w(TAG, "stream?.stop() in stopStream", e) }
     stream = null
-    liveStreamServer.stop()
-    voiceCommand.stopContinuousListening()
-    voiceJob?.cancel()
+    try { liveStreamServer.stop() } catch (e: Exception) { Log.w(TAG, "liveStreamServer.stop()", e) }
+    try { voiceCommand.stopContinuousListening() } catch (_: Exception) {}
+    try { voiceJob?.cancel() } catch (_: Exception) {}
     voiceJob = null
-    audioStatusJob?.cancel()
+    try { audioStatusJob?.cancel() } catch (_: Exception) {}
     audioStatusJob = null
-    speakingJob?.cancel()
+    try { speakingJob?.cancel() } catch (_: Exception) {}
     speakingJob = null
-    glassesAudio.disableGlassesMic()
-    StreamForegroundService.stop(getApplication())
+    try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
+    try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
 
     if (sessionToTearDown != null) {
       teardownJob =
