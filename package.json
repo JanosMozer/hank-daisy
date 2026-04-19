@@ -1,0 +1,10 @@
+{
+  "name": "hank-daisy",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun dashboard/server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0"
+  }
+}
