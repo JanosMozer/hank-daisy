@@ -6,11 +6,19 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.jetbrains.kotlin.android)
   alias(libs.plugins.compose.compiler)
 }
+
+val localProps =
+    Properties().apply {
+      val f = rootProject.file("local.properties")
+      if (f.exists()) load(f.inputStream())
+    }
 
 android {
   namespace = "com.meta.wearable.dat.externalsampleapps.cameraaccess"
@@ -31,8 +39,8 @@ android {
     // Meta Wearables Device Access Toolkit Setup
     // Without Developer Mode, these values need to be set with credentials from the app registered
     // in Wearables Developer Center
-    manifestPlaceholders["mwdat_application_id"] = ""
-    manifestPlaceholders["mwdat_client_token"] = ""
+    manifestPlaceholders["mwdat_application_id"] = localProps.getProperty("mwdat_application_id", "")
+    manifestPlaceholders["mwdat_client_token"] = localProps.getProperty("mwdat_client_token", "")
   }
 
   buildTypes {
