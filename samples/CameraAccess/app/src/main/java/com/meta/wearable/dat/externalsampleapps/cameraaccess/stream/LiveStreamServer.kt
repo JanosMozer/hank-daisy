@@ -10,12 +10,15 @@ import java.util.concurrent.Executors
 
 class LiveStreamServer(private val port: Int = 8080) {
     private var serverSocket: ServerSocket? = null
-    private val executor = Executors.newCachedThreadPool()
+    private var executor = Executors.newCachedThreadPool()
     private var isRunning = false
     private val clients = mutableSetOf<Socket>()
 
     fun start() {
         if (isRunning) return
+        if (executor.isShutdown) {
+            executor = Executors.newCachedThreadPool()
+        }
         isRunning = true
         executor.execute {
             try {

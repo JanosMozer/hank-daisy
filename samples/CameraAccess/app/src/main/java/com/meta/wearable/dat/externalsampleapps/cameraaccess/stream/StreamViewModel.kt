@@ -51,8 +51,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @SuppressLint("AutoCloseableUse")
 class StreamViewModel(
@@ -78,11 +80,38 @@ class StreamViewModel(
   private var sessionStateJob: Job? = null
   private var stream: Stream? = null
   private val liveStreamServer = LiveStreamServer(8080)
+  private val geminiService = GeminiService()
+  private val glassesAudio = GlassesAudioManager(application)
+  private val voiceCommand = VoiceCommandManager(application)
+  private var voiceJob: Job? = null
+  private var audioStatusJob: Job? = null
+  private var speakingJob: Job? = null
+  private var teardownJob: Job? = null
+  private var analyzeJob: Job? = null
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
 
   fun startStream() {
+    if (session != null && videoJob != null) {
+      Log.d(TAG, "startStream() called while already streaming — ignoring")
+      return
+    }
+    viewModelScope.launch {
+      // If a previous session is still tearing down, wait for it. The DAT SDK
+      // doesn't tolerate creating a new session while the previous one is in
+      // STOPPING — it crashes the connection thread.
+      teardownJob?.join()
+      try {
+        startStreamLocked()
+      } catch (e: Exception) {
+        Log.e(TAG, "startStream failed", e)
+        _uiState.update { INITIAL_STATE }
+      }
+    }
+  }
+
+  private fun startStreamLocked() {
     videoJob?.cancel()
     stateJob?.cancel()
     errorJob?.cancel()
@@ -107,99 +136,197 @@ class StreamViewModel(
     presentationQueue = queue
     queue.start()
     if (session == null) {
-      Wearables.createSession(deviceSelector)
-          .onSuccess { createdSession ->
-            session = createdSession
-            session?.start()
-          }
-          .onFailure { error, _ -> Log.e(TAG, "Failed to create session: ${error.description}") }
+      try {
+        Wearables.createSession(deviceSelector)
+            .onSuccess { createdSession ->
+              session = createdSession
+              try {
+                session?.start()
+              } catch (e: Exception) {
+                Log.e(TAG, "session?.start() failed", e)
+              }
+            }
+            .onFailure { error, _ ->
+              Log.e(TAG, "Failed to create session: ${error.description}")
+            }
+      } catch (e: Exception) {
+        Log.e(TAG, "createSession threw", e)
+      }
       if (session == null) return
     }
-    liveStreamServer.start()
+    try {
+      liveStreamServer.start()
+    } catch (e: Exception) {
+      Log.w(TAG, "liveStreamServer.start() failed (continuing)", e)
+    }
+    try {
+      StreamForegroundService.start(getApplication())
+    } catch (e: Exception) {
+      Log.w(TAG, "StreamForegroundService.start() failed (continuing)", e)
+    }
+    glassesAudio.enableGlassesMic()
+    observeGlassesAudio()
+    observeTtsSpeaking()
+    startWakeWordListening()
     startStreamInternal()
+  }
+
+  private fun observeGlassesAudio() {
+    audioStatusJob?.cancel()
+    audioStatusJob =
+        viewModelScope.launch {
+          glassesAudio.glassesAudioStatus.collect { status ->
+            _uiState.update { it.copy(glassesAudioStatus = status) }
+          }
+        }
+  }
+
+  private fun observeTtsSpeaking() {
+    speakingJob?.cancel()
+    speakingJob =
+        viewModelScope.launch {
+          glassesAudio.isSpeaking.collect { speaking ->
+            voiceCommand.setMuted(speaking)
+          }
+        }
   }
 
   private fun startStreamInternal() {
     Log.d(TAG, "startStreamInternal() - collecting session state")
     sessionStateJob =
-        viewModelScope.launch {
+        safeLaunch("sessionState") {
           session?.state?.collect { currentState ->
             if (currentState == DeviceSessionState.STARTED) {
               videoJob?.cancel()
               stateJob?.cancel()
               errorJob?.cancel()
-              stream?.stop()
+              try {
+                stream?.stop()
+              } catch (e: Exception) {
+                Log.w(TAG, "stream?.stop() before re-add failed", e)
+              }
               stream = null
-              session
-                  ?.addStream(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, 24))
-                  ?.onSuccess { addedStream ->
-                    stream = addedStream
-                    videoJob =
-                        viewModelScope.launch {
-                          Log.d(TAG, "Collecting video frames from stream")
-                          stream?.videoStream?.collect { handleVideoFrame(it) }
-                          Log.d(TAG, "Video stream collection ended")
-                        }
-                    stateJob =
-                        viewModelScope.launch {
-                          stream?.state?.collect { currentState ->
-                            val prevState = _uiState.value.streamSessionState
-                            Log.d(TAG, "Stream state changed: $prevState -> $currentState")
-                            _uiState.update { it.copy(streamSessionState = currentState) }
+              try {
+                session
+                    ?.addStream(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, 24))
+                    ?.onSuccess { addedStream ->
+                      stream = addedStream
+                      videoJob =
+                          safeLaunch("videoStream") {
+                            Log.d(TAG, "Collecting video frames from stream")
+                            stream?.videoStream?.collect { handleVideoFrame(it) }
+                            Log.d(TAG, "Video stream collection ended")
+                          }
+                      stateJob =
+                          safeLaunch("streamState") {
+                            stream?.state?.collect { currentState ->
+                              val prevState = _uiState.value.streamSessionState
+                              Log.d(TAG, "Stream state changed: $prevState -> $currentState")
+                              _uiState.update { it.copy(streamSessionState = currentState) }
 
-                            val wasActive = prevState !in SESSION_TERMINAL_STATES
-                            val isTerminated = currentState in SESSION_TERMINAL_STATES
-                            if (wasActive && isTerminated) {
-                              Log.d(TAG, "Terminal state reached, navigating back")
-                              stopStream()
-                              wearablesViewModel.navigateToDeviceSelection()
+                              val wasActive = prevState !in SESSION_TERMINAL_STATES
+                              val isTerminated = currentState in SESSION_TERMINAL_STATES
+                              if (wasActive && isTerminated) {
+                                Log.d(TAG, "Terminal state reached, navigating back")
+                                stopStream()
+                                wearablesViewModel.navigateToDeviceSelection()
+                              }
                             }
                           }
-                        }
-                    errorJob =
-                        viewModelScope.launch {
-                          stream?.errorStream?.collect { error ->
-                            Log.d(
-                                TAG,
-                                "Stream error received: $error (description: ${error.description})",
-                            )
-                            if (error == StreamError.HINGE_CLOSED) {
+                      errorJob =
+                          safeLaunch("errorStream") {
+                            stream?.errorStream?.collect { error ->
                               Log.d(
                                   TAG,
-                                  "HINGE_CLOSED detected, stopping stream and navigating back",
+                                  "Stream error received: $error (description: ${error.description})",
                               )
-                              stopStream()
-                              wearablesViewModel.navigateToDeviceSelection()
+                              if (error == StreamError.HINGE_CLOSED) {
+                                Log.d(
+                                    TAG,
+                                    "HINGE_CLOSED detected, stopping stream and navigating back",
+                                )
+                                stopStream()
+                                wearablesViewModel.navigateToDeviceSelection()
+                              }
                             }
                           }
-                        }
-                    stream?.start()
-                  }
-                  ?.onFailure { error, _ ->
-                    Log.e(TAG, "Failed to add stream to session: ${error.description}")
-                  }
+                      try {
+                        stream?.start()
+                      } catch (e: Exception) {
+                        Log.e(TAG, "stream?.start() failed", e)
+                        stopStream()
+                      }
+                    }
+                    ?.onFailure { error, _ ->
+                      Log.e(TAG, "Failed to add stream to session: ${error.description}")
+                    }
+              } catch (e: Exception) {
+                Log.e(TAG, "addStream threw", e)
+                stopStream()
+              }
             }
           }
         }
   }
 
+  /** viewModelScope.launch + try/catch so an exception in any collect doesn't kill the process. */
+  private fun safeLaunch(label: String, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): Job =
+      viewModelScope.launch {
+        try {
+          block()
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+          throw ce
+        } catch (e: Exception) {
+          Log.e(TAG, "Coroutine [$label] crashed (swallowed)", e)
+        }
+      }
+
   fun stopStream() {
-    videoJob?.cancel()
+    if (session == null && videoJob == null && teardownJob == null) {
+      return
+    }
+    val sessionToTearDown = session
+    session = null
+    try { videoJob?.cancel() } catch (_: Exception) {}
     videoJob = null
-    stateJob?.cancel()
+    try { stateJob?.cancel() } catch (_: Exception) {}
     stateJob = null
-    errorJob?.cancel()
+    try { errorJob?.cancel() } catch (_: Exception) {}
     errorJob = null
-    sessionStateJob?.cancel()
+    try { sessionStateJob?.cancel() } catch (_: Exception) {}
     sessionStateJob = null
-    presentationQueue?.stop()
+    try { presentationQueue?.stop() } catch (_: Exception) {}
     presentationQueue = null
     _uiState.update { INITIAL_STATE }
-    stream?.stop()
+    try { stream?.stop() } catch (e: Exception) { Log.w(TAG, "stream?.stop() in stopStream", e) }
     stream = null
-    liveStreamServer.stop()
-    session?.stop()
-    session = null
+    try { liveStreamServer.stop() } catch (e: Exception) { Log.w(TAG, "liveStreamServer.stop()", e) }
+    try { voiceCommand.stopContinuousListening() } catch (_: Exception) {}
+    try { voiceJob?.cancel() } catch (_: Exception) {}
+    voiceJob = null
+    try { audioStatusJob?.cancel() } catch (_: Exception) {}
+    audioStatusJob = null
+    try { speakingJob?.cancel() } catch (_: Exception) {}
+    speakingJob = null
+    try { glassesAudio.stopSpeaking() } catch (_: Exception) {}
+    try { analyzeJob?.cancel() } catch (_: Exception) {}
+    analyzeJob = null
+    try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
+    try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
+
+    if (sessionToTearDown != null) {
+      teardownJob =
+          viewModelScope.launch {
+            try {
+              sessionToTearDown.stop()
+              withTimeoutOrNull(3000L) {
+                sessionToTearDown.state.first { it == DeviceSessionState.IDLE }
+              }
+            } catch (e: Exception) {
+              Log.w(TAG, "Session teardown error (ignored)", e)
+            }
+          }
+    }
   }
 
   fun capturePhoto() {
@@ -240,6 +367,77 @@ class StreamViewModel(
   fun hideShareDialog() {
     _uiState.update { it.copy(isShareDialogVisible = false) }
   }
+
+  /**
+   * Start always-on "Hey Hank" listening.
+   * Called automatically when stream starts.
+   */
+  private fun startWakeWordListening() {
+    voiceCommand.startContinuousListening()
+
+    voiceJob?.cancel()
+    voiceJob = viewModelScope.launch {
+      voiceCommand.state.collect { voiceState ->
+        when (voiceState) {
+          is VoiceCommandManager.VoiceState.Passive -> {
+            _uiState.update { it.copy(isListening = false, isWakeWordActive = true) }
+          }
+          is VoiceCommandManager.VoiceState.Listening -> {
+            _uiState.update { it.copy(isListening = true) }
+          }
+          is VoiceCommandManager.VoiceState.QuestionReady -> {
+            _uiState.update { it.copy(isListening = false, spokenQuestion = voiceState.text) }
+            analyzeWithQuestion(voiceState.text)
+          }
+          is VoiceCommandManager.VoiceState.Error -> {
+            Log.w(TAG, "Voice error: ${voiceState.message}")
+            // Don't show errors in UI for passive mode — just keep listening
+          }
+          is VoiceCommandManager.VoiceState.Off -> {
+            _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+          }
+        }
+      }
+    }
+  }
+
+  /** Manual Ask Hank — skips wake word, goes straight to listening for question. */
+  fun askHank() {
+    if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
+    _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
+    voiceCommand.startManualListen()
+  }
+
+  /** Quick analyze without voice — uses default prompt. */
+  fun analyzeCurrentFrame() {
+    analyzeWithQuestion("What do you see? Identify any problems and tell me how to fix them step by step.")
+  }
+
+  private fun analyzeWithQuestion(question: String) {
+    val currentFrame = _uiState.value.videoFrame ?: return
+    if (_uiState.value.isAnalyzing) return
+
+    _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
+
+    analyzeJob?.cancel()
+    analyzeJob = viewModelScope.launch {
+      val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
+      val response = geminiService.analyzeFrame(frameCopy, question)
+      _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
+      glassesAudio.speak(response)
+      frameCopy.recycle()
+
+      // Resume wake word listening after response
+      voiceCommand.onQuestionHandled()
+    }
+  }
+
+  fun cancelListening() {
+    voiceCommand.stopContinuousListening()
+    voiceJob?.cancel()
+    _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+  }
+
 
   fun sharePhoto(bitmap: Bitmap) {
     val context = getApplication<Application>()
@@ -383,6 +581,9 @@ class StreamViewModel(
   override fun onCleared() {
     super.onCleared()
     stopStream()
+    glassesAudio.shutdown()
+    voiceCommand.shutdown()
+    voiceJob?.cancel()
     session?.stop()
     session = null
   }

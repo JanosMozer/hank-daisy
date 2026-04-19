@@ -16,29 +16,41 @@ package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.camera.types.StreamSessionState
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.R
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.GlassesAudioManager
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.StreamViewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
 
@@ -57,7 +69,10 @@ fun StreamScreen(
 ) {
   val streamUiState by streamViewModel.uiState.collectAsStateWithLifecycle()
 
-  LaunchedEffect(Unit) { streamViewModel.startStream() }
+  DisposableEffect(Unit) {
+    streamViewModel.startStream()
+    onDispose { streamViewModel.stopStream() }
+  }
 
   Box(modifier = modifier.fillMaxSize()) {
     streamUiState.videoFrame?.let { videoFrame ->
@@ -76,6 +91,149 @@ fun StreamScreen(
       CircularProgressIndicator(
           modifier = Modifier.align(Alignment.Center),
       )
+    }
+
+    // Gemini response overlay (scrollable for longer step-by-step responses)
+    streamUiState.lastGeminiResponse?.let { response ->
+      Box(
+          modifier = Modifier
+              .align(Alignment.TopCenter)
+              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+              .background(
+                  Color.Black.copy(alpha = 0.8f),
+                  shape = RoundedCornerShape(16.dp),
+              )
+              .padding(16.dp)
+              .heightIn(max = 300.dp),
+      ) {
+        Column {
+          streamUiState.spokenQuestion?.let { question ->
+            Text(
+                text = "You asked: \"$question\"",
+                color = Color(0xFF38BDF8),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+          }
+          Text(
+              text = response,
+              color = Color.White,
+              fontSize = 13.sp,
+              lineHeight = 18.sp,
+              modifier = Modifier
+                  .fillMaxWidth()
+                  .verticalScroll(rememberScrollState()),
+          )
+        }
+      }
+    }
+
+    // Listening indicator
+    if (streamUiState.isListening) {
+      Box(
+          modifier = Modifier
+              .align(Alignment.TopCenter)
+              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+              .background(
+                  Color(0xFF1E40AF).copy(alpha = 0.9f),
+                  shape = RoundedCornerShape(16.dp),
+              )
+              .padding(16.dp),
+      ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+          CircularProgressIndicator(
+              color = Color(0xFF38BDF8),
+              modifier = Modifier.height(20.dp),
+          )
+          Text(
+              text = "\uD83C\uDF99\uFE0F Listening... ask your question",
+              color = Color.White,
+              fontSize = 14.sp,
+              fontWeight = FontWeight.SemiBold,
+          )
+        }
+      }
+    }
+
+    // Analyzing indicator
+    if (streamUiState.isAnalyzing) {
+      Box(
+          modifier = Modifier
+              .align(Alignment.TopCenter)
+              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+              .background(
+                  Color.Black.copy(alpha = 0.75f),
+                  shape = RoundedCornerShape(16.dp),
+              )
+              .padding(16.dp),
+      ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+          CircularProgressIndicator(
+              color = Color.White,
+              modifier = Modifier.height(20.dp),
+          )
+          Text(
+              text = "Hank is analyzing...",
+              color = Color.White,
+              fontSize = 14.sp,
+              fontWeight = FontWeight.SemiBold,
+          )
+        }
+      }
+    }
+
+    // Glasses audio routing banner — warns the mechanic if the glasses
+    // aren't paired as a Bluetooth headset (so I/O falls back to the phone).
+    if (streamUiState.glassesAudioStatus != GlassesAudioManager.AudioStatus.FULL &&
+        streamUiState.streamSessionState == StreamSessionState.STREAMING) {
+      val (msg, bg) = when (streamUiState.glassesAudioStatus) {
+        GlassesAudioManager.AudioStatus.NONE ->
+          "Pair glasses as Bluetooth audio in Settings — using phone mic+speaker." to Color(0xFFB91C1C)
+        GlassesAudioManager.AudioStatus.SPEAKER_ONLY ->
+          "Glasses speaker OK; mic falls back to phone (HFP not connected)." to Color(0xFFB45309)
+        GlassesAudioManager.AudioStatus.MIC_ONLY ->
+          "Glasses mic OK; reply plays on phone (A2DP not connected)." to Color(0xFFB45309)
+        GlassesAudioManager.AudioStatus.FULL -> "" to Color.Transparent
+      }
+      Box(
+          modifier = Modifier
+              .align(Alignment.BottomCenter)
+              .padding(bottom = 96.dp, start = 16.dp, end = 16.dp)
+              .background(bg.copy(alpha = 0.92f), shape = RoundedCornerShape(12.dp))
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
+        Text(text = msg, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+      }
+    }
+
+    // Always-on wake word indicator (subtle, bottom-right)
+    if (streamUiState.isWakeWordActive && !streamUiState.isListening && !streamUiState.isAnalyzing && streamUiState.lastGeminiResponse == null) {
+      Box(
+          modifier = Modifier
+              .align(Alignment.TopEnd)
+              .padding(top = 48.dp, end = 16.dp)
+              .background(
+                  Color(0xFF065F46).copy(alpha = 0.85f),
+                  shape = RoundedCornerShape(12.dp),
+              )
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
+        Text(
+            text = "\uD83D\uDFE2 Say \"Hey Hank\"",
+            color = Color(0xFF34D399),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+      }
     }
 
     Box(modifier = Modifier.fillMaxSize().padding(all = 24.dp)) {
@@ -97,6 +255,23 @@ fun StreamScreen(
             isDestructive = true,
             modifier = Modifier.weight(1f),
         )
+
+        // Manual Ask Hank (skips wake word, goes straight to listening)
+        if (streamUiState.isListening) {
+          SwitchButton(
+              label = "Cancel",
+              onClick = { streamViewModel.cancelListening() },
+              isDestructive = true,
+              modifier = Modifier.weight(1f),
+          )
+        } else {
+          SwitchButton(
+              label = "\uD83C\uDF99\uFE0F Ask Hank",
+              onClick = { streamViewModel.askHank() },
+              enabled = !streamUiState.isAnalyzing,
+              modifier = Modifier.weight(1f),
+          )
+        }
 
         // Photo capture button
         CaptureButton(

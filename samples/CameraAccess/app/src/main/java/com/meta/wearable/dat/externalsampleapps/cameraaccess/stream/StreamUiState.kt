@@ -22,4 +22,10 @@ data class StreamUiState(
     val capturedPhoto: Bitmap? = null,
     val isShareDialogVisible: Boolean = false,
     val isCapturing: Boolean = false,
+    val isAnalyzing: Boolean = false,
+    val isListening: Boolean = false,
+    val isWakeWordActive: Boolean = false,
+    val spokenQuestion: String? = null,
+    val lastGeminiResponse: String? = null,
+    val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,
 )
