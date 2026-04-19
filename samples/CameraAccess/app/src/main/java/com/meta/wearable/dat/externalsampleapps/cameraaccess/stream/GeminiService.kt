@@ -9,17 +9,25 @@
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.stream
 
 import android.graphics.Bitmap
+import android.util.Base64
 import android.util.Log
-import com.google.genai.Client
-import com.google.genai.types.GenerateContentConfig
-import com.google.genai.types.Part
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.TimeUnit
 
 class GeminiService {
 
     companion object {
         private const val TAG = "CameraAccess:GeminiService"
+        private const val API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
         private const val SYSTEM_PROMPT = """You are Hank, an expert automotive diagnostic assistant integrated into smart glasses worn by mechanics and car owners. You analyze images of car components, dashboards, engine bays, and vehicle issues in real-time.
 
@@ -38,47 +46,84 @@ Rules:
 - Always prioritize SAFETY — if something looks dangerous, say so immediately"""
     }
 
-    private val client: Client? = run {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank()) {
-            Log.w(TAG, "Gemini API key not set in local.properties")
-            null
-        } else {
-            Client(apiKey = apiKey)
-        }
-    }
+    private val apiKey: String = BuildConfig.GEMINI_API_KEY
 
-    private fun bitmapToBytes(bitmap: Bitmap): ByteArray {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private fun bitmapToBase64(bitmap: Bitmap): String {
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-        return stream.toByteArray()
+        return Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
     }
 
     suspend fun analyzeFrame(
         bitmap: Bitmap,
         prompt: String = "What do you see? Identify any car problems and tell me the fix."
     ): String {
-        if (client == null) {
+        if (apiKey.isBlank()) {
             return "Gemini API key not configured. Add gemini_api_key to local.properties."
         }
 
-        return try {
-            val imageBytes = bitmapToBytes(bitmap)
-            val imagePart = Part.fromBytes(imageBytes, "image/jpeg")
+        return withContext(Dispatchers.IO) {
+            try {
+                val base64Image = bitmapToBase64(bitmap)
 
-            val response = client.models.generateContent(
-                model = "gemini-2.0-flash",
-                contents = listOf(imagePart, prompt),
-                config = GenerateContentConfig(
-                    temperature = 0.4f,
-                    maxOutputTokens = 150,
-                    systemInstruction = SYSTEM_PROMPT,
-                ),
-            )
-            response.text ?: "No response from Gemini."
-        } catch (e: Exception) {
-            Log.e(TAG, "Gemini analysis failed", e)
-            "Error: ${e.message}"
+                val requestBody = JSONObject().apply {
+                    put("system_instruction", JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply { put("text", SYSTEM_PROMPT) })
+                        })
+                    })
+                    put("contents", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("parts", JSONArray().apply {
+                                put(JSONObject().apply {
+                                    put("inline_data", JSONObject().apply {
+                                        put("mime_type", "image/jpeg")
+                                        put("data", base64Image)
+                                    })
+                                })
+                                put(JSONObject().apply { put("text", prompt) })
+                            })
+                        })
+                    })
+                    put("generationConfig", JSONObject().apply {
+                        put("temperature", 0.4)
+                        put("maxOutputTokens", 150)
+                    })
+                }.toString()
+
+                val request = Request.Builder()
+                    .url("$API_URL?key=$apiKey")
+                    .post(requestBody.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val response = client.newCall(request).execute()
+                val body = response.body?.string() ?: return@withContext "No response from Gemini."
+
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Gemini API error ${response.code}: $body")
+                    return@withContext "Error: Gemini API returned ${response.code}"
+                }
+
+                val json = JSONObject(body)
+                val candidates = json.optJSONArray("candidates")
+                val text = candidates
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("content")
+                    ?.optJSONArray("parts")
+                    ?.optJSONObject(0)
+                    ?.optString("text")
+
+                text ?: "No response from Gemini."
+            } catch (e: Exception) {
+                Log.e(TAG, "Gemini analysis failed", e)
+                "Error: ${e.message}"
+            }
         }
     }
 }
