@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.camera.types.StreamSessionState
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.R
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.GlassesAudioManager
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.StreamViewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
 
@@ -184,6 +185,30 @@ fun StreamScreen(
               fontWeight = FontWeight.SemiBold,
           )
         }
+      }
+    }
+
+    // Glasses audio routing banner — warns the mechanic if the glasses
+    // aren't paired as a Bluetooth headset (so I/O falls back to the phone).
+    if (streamUiState.glassesAudioStatus != GlassesAudioManager.AudioStatus.FULL &&
+        streamUiState.streamSessionState == StreamSessionState.STREAMING) {
+      val (msg, bg) = when (streamUiState.glassesAudioStatus) {
+        GlassesAudioManager.AudioStatus.NONE ->
+          "Pair glasses as Bluetooth audio in Settings — using phone mic+speaker." to Color(0xFFB91C1C)
+        GlassesAudioManager.AudioStatus.SPEAKER_ONLY ->
+          "Glasses speaker OK; mic falls back to phone (HFP not connected)." to Color(0xFFB45309)
+        GlassesAudioManager.AudioStatus.MIC_ONLY ->
+          "Glasses mic OK; reply plays on phone (A2DP not connected)." to Color(0xFFB45309)
+        GlassesAudioManager.AudioStatus.FULL -> "" to Color.Transparent
+      }
+      Box(
+          modifier = Modifier
+              .align(Alignment.BottomCenter)
+              .padding(bottom = 96.dp, start = 16.dp, end = 16.dp)
+              .background(bg.copy(alpha = 0.92f), shape = RoundedCornerShape(12.dp))
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
+        Text(text = msg, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
       }
     }
 

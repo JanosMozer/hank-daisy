@@ -82,6 +82,8 @@ class StreamViewModel(
   private val glassesAudio = GlassesAudioManager(application)
   private val voiceCommand = VoiceCommandManager(application)
   private var voiceJob: Job? = null
+  private var audioStatusJob: Job? = null
+  private var speakingJob: Job? = null
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -120,8 +122,32 @@ class StreamViewModel(
       if (session == null) return
     }
     liveStreamServer.start()
+    StreamForegroundService.start(getApplication())
+    glassesAudio.enableGlassesMic()
+    observeGlassesAudio()
+    observeTtsSpeaking()
     startWakeWordListening()
     startStreamInternal()
+  }
+
+  private fun observeGlassesAudio() {
+    audioStatusJob?.cancel()
+    audioStatusJob =
+        viewModelScope.launch {
+          glassesAudio.glassesAudioStatus.collect { status ->
+            _uiState.update { it.copy(glassesAudioStatus = status) }
+          }
+        }
+  }
+
+  private fun observeTtsSpeaking() {
+    speakingJob?.cancel()
+    speakingJob =
+        viewModelScope.launch {
+          glassesAudio.isSpeaking.collect { speaking ->
+            voiceCommand.setMuted(speaking)
+          }
+        }
   }
 
   private fun startStreamInternal() {
@@ -206,6 +232,12 @@ class StreamViewModel(
     voiceCommand.stopContinuousListening()
     voiceJob?.cancel()
     voiceJob = null
+    audioStatusJob?.cancel()
+    audioStatusJob = null
+    speakingJob?.cancel()
+    speakingJob = null
+    glassesAudio.disableGlassesMic()
+    StreamForegroundService.stop(getApplication())
     session?.stop()
     session = null
   }

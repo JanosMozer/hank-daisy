@@ -58,6 +58,7 @@ class VoiceCommandManager(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private var isRunning = false
     private var isFollowUp = false  // true when we detected wake word, now waiting for question
+    private var isMuted = false     // pause listening while Hank himself is talking
 
     /**
      * Start always-on passive listening for "Hey Hank".
@@ -101,6 +102,21 @@ class VoiceCommandManager(private val context: Context) {
         }
     }
 
+    /**
+     * Pause/resume the recognizer while TTS is speaking through the glasses, so
+     * Hank's own reply doesn't re-trigger the wake word (audio feedback loop).
+     */
+    fun setMuted(muted: Boolean) {
+        if (muted == isMuted) return
+        isMuted = muted
+        if (muted) {
+            handler.removeCallbacksAndMessages(null)
+            destroyRecognizer()
+        } else if (isRunning || isFollowUp) {
+            scheduleRestart()
+        }
+    }
+
     fun shutdown() {
         stopContinuousListening()
     }
@@ -109,6 +125,7 @@ class VoiceCommandManager(private val context: Context) {
 
     private fun startRecognizer() {
         if (!isRunning && !isFollowUp) return
+        if (isMuted) return
 
         handler.post {
             destroyRecognizer()
@@ -246,6 +263,7 @@ class VoiceCommandManager(private val context: Context) {
 
     private fun scheduleRestart() {
         if (!isRunning && !isFollowUp) return
+        if (isMuted) return
         handler.postDelayed({ startRecognizer() }, RESTART_DELAY_MS)
     }
 

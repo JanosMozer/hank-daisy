@@ -21,6 +21,9 @@ import android.Manifest.permission.BLUETOOTH
 import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.CAMERA
 import android.Manifest.permission.INTERNET
+import android.Manifest.permission.POST_NOTIFICATIONS
+import android.Manifest.permission.RECORD_AUDIO
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -40,8 +43,21 @@ import kotlinx.coroutines.sync.withLock
 
 class MainActivity : ComponentActivity() {
   companion object {
-    // Required Android permissions for the DAT SDK to function properly
-    val PERMISSIONS: Array<String> = arrayOf(BLUETOOTH, BLUETOOTH_CONNECT, CAMERA, INTERNET)
+    // Required Android permissions for the DAT SDK + glasses-mediated voice loop.
+    // RECORD_AUDIO is needed so SpeechRecognizer can read from the SCO mic (glasses).
+    // POST_NOTIFICATIONS is required on API 33+ for the foreground service notification.
+    val PERMISSIONS: Array<String> =
+        buildList {
+              add(BLUETOOTH)
+              add(BLUETOOTH_CONNECT)
+              add(CAMERA)
+              add(INTERNET)
+              add(RECORD_AUDIO)
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(POST_NOTIFICATIONS)
+              }
+            }
+            .toTypedArray()
   }
 
   val viewModel: WearablesViewModel by viewModels()
