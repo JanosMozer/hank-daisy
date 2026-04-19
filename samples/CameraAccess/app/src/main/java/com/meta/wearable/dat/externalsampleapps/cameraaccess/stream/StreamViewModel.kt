@@ -250,7 +250,7 @@ class StreamViewModel(
     _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
 
     viewModelScope.launch {
-      val frameCopy = currentFrame.copy(currentFrame.config, true)
+      val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
       val response = geminiService.analyzeFrame(frameCopy)
       _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
       glassesAudio.speak(response)
