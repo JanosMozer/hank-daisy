@@ -133,6 +133,14 @@ class GlassesAudioManager(private val context: Context) {
         refreshStatus()
     }
 
+    /** Cut off the current TTS utterance immediately. */
+    fun stopSpeaking() {
+        try {
+            tts?.stop()
+        } catch (_: Exception) {}
+        _isSpeaking.value = false
+    }
+
     /** Speak the reply through the glasses (A2DP) if connected, else through the phone. */
     fun speak(text: String) {
         if (!ttsReady) {

@@ -87,6 +87,7 @@ class StreamViewModel(
   private var audioStatusJob: Job? = null
   private var speakingJob: Job? = null
   private var teardownJob: Job? = null
+  private var analyzeJob: Job? = null
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -307,6 +308,9 @@ class StreamViewModel(
     audioStatusJob = null
     try { speakingJob?.cancel() } catch (_: Exception) {}
     speakingJob = null
+    try { glassesAudio.stopSpeaking() } catch (_: Exception) {}
+    try { analyzeJob?.cancel() } catch (_: Exception) {}
+    analyzeJob = null
     try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
     try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
 
@@ -415,7 +419,8 @@ class StreamViewModel(
 
     _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
 
-    viewModelScope.launch {
+    analyzeJob?.cancel()
+    analyzeJob = viewModelScope.launch {
       val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
       val response = geminiService.analyzeFrame(frameCopy, question)
       _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
