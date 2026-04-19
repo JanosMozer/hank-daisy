@@ -153,49 +153,20 @@ class GlassesAudioManager(private val context: Context) {
     }
 
     /**
-     * Open the SCO link to the glasses so SpeechRecognizer (which reads the active
-     * communication device) captures from the glasses' mic instead of the phone.
+     * Mic routing is intentionally a no-op here. SpeechRecognizer is implemented
+     * by Google in a separate process and does not honor app-level
+     * setCommunicationDevice(); switching audio mode to IN_COMMUNICATION also
+     * makes the recognizer go silent on most devices. Real glasses-mic capture
+     * needs AudioRecord + an on-device wake-word library (e.g. Porcupine), not
+     * SpeechRecognizer. Until that swap, we leave routing alone so the existing
+     * phone-mic path keeps working.
      */
     fun enableGlassesMic() {
-        val sco = findScoDevice()
-        if (sco == null) {
-            Log.w(TAG, "No SCO device — mic will fall back to phone")
-            return
-        }
-        try {
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                audioManager.setCommunicationDevice(sco)
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.startBluetoothSco()
-                @Suppress("DEPRECATION")
-                audioManager.isBluetoothScoOn = true
-            }
-            scoActive = true
-            Log.d(TAG, "Glasses mic enabled (SCO)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to enable glasses mic", e)
-        }
+        Log.d(TAG, "enableGlassesMic() is a no-op (SpeechRecognizer ignores app routing)")
     }
 
     fun disableGlassesMic() {
-        if (!scoActive) return
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                audioManager.clearCommunicationDevice()
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager.isBluetoothScoOn = false
-                @Suppress("DEPRECATION")
-                audioManager.stopBluetoothSco()
-            }
-            audioManager.mode = AudioManager.MODE_NORMAL
-            scoActive = false
-            Log.d(TAG, "Glasses mic disabled")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to disable glasses mic", e)
-        }
+        // No-op — pairs with enableGlassesMic above.
     }
 
     private fun findA2dpDevice(): AudioDeviceInfo? {
