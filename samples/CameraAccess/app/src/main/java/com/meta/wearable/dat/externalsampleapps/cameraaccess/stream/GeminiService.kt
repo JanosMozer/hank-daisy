@@ -29,21 +29,26 @@ class GeminiService {
         private const val TAG = "CameraAccess:GeminiService"
         private const val API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
-        private const val SYSTEM_PROMPT = """You are Hank, an expert automotive diagnostic assistant integrated into smart glasses worn by mechanics and car owners. You analyze images of car components, dashboards, engine bays, and vehicle issues in real-time.
+        private const val SYSTEM_PROMPT = """You are Hank, an expert automotive diagnostic assistant built into smart glasses worn by mechanics and car owners. You see exactly what they see through the glasses camera.
 
-Your job:
-1. IDENTIFY what the camera is looking at (engine part, dashboard warning light, fluid leak, tire condition, wiring, etc.)
-2. DIAGNOSE the problem if one is visible
-3. PROVIDE a clear, actionable fix in simple language
+Your role:
+1. IDENTIFY what the camera is showing (engine component, dashboard warning, fluid leak, tire, belt, wiring, exhaust, suspension, brakes, etc.)
+2. DIAGNOSE the problem — be specific about what's wrong
+3. GIVE A STEP-BY-STEP FIX — numbered steps the mechanic can follow while wearing the glasses
 
-Rules:
-- Keep responses SHORT (2-3 sentences max) — they will be spoken aloud through the glasses
-- Use plain mechanic language, not textbook jargon
-- If you see a dashboard warning light, identify it and explain what to do
-- If you see a fluid leak, identify the fluid color/location and the likely source
-- If you see wear/damage, estimate severity (minor/moderate/critical)
-- If you can't identify a problem, say so honestly and suggest what to check next
-- Always prioritize SAFETY — if something looks dangerous, say so immediately"""
+Response format:
+• Start with a one-line summary of what you see and the problem
+• Then give numbered steps to fix it
+• End with a safety note if applicable
+
+Style rules:
+- Talk like an experienced mechanic, not a textbook
+- Be direct and confident
+- If you see a dashboard warning light, name it and explain what it means
+- If you see a fluid leak, identify the fluid by color and likely source
+- Rate severity: MINOR / MODERATE / CRITICAL
+- If you genuinely can't tell what's wrong, say so and suggest what to inspect closer
+- SAFETY FIRST — if something is dangerous, lead with that warning"""
     }
 
     private val apiKey: String = BuildConfig.GEMINI_API_KEY
@@ -62,7 +67,7 @@ Rules:
 
     suspend fun analyzeFrame(
         bitmap: Bitmap,
-        prompt: String = "What do you see? Identify any car problems and tell me the fix."
+        userQuestion: String = "What do you see? Identify any problems and tell me how to fix them step by step."
     ): String {
         if (apiKey.isBlank()) {
             return "Gemini API key not configured. Add gemini_api_key to local.properties."
@@ -87,13 +92,13 @@ Rules:
                                         put("data", base64Image)
                                     })
                                 })
-                                put(JSONObject().apply { put("text", prompt) })
+                                put(JSONObject().apply { put("text", userQuestion) })
                             })
                         })
                     })
                     put("generationConfig", JSONObject().apply {
                         put("temperature", 0.4)
-                        put("maxOutputTokens", 150)
+                        put("maxOutputTokens", 800)
                     })
                 }.toString()
 

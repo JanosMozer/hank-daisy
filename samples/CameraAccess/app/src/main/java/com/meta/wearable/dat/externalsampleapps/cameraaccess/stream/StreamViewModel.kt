@@ -80,6 +80,8 @@ class StreamViewModel(
   private val liveStreamServer = LiveStreamServer(8080)
   private val geminiService = GeminiService()
   private val glassesAudio = GlassesAudioManager(application)
+  private val voiceCommand = VoiceCommandManager(application)
+  private var voiceJob: Job? = null
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -243,7 +245,51 @@ class StreamViewModel(
     _uiState.update { it.copy(isShareDialogVisible = false) }
   }
 
+  /**
+   * Start the Ask Hank flow:
+   * 1. Start listening for voice
+   * 2. When speech is recognized, capture current frame
+   * 3. Send frame + spoken question to Gemini
+   * 4. Speak the response through the glasses
+   */
+  fun askHank() {
+    if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
+
+    _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
+    voiceCommand.resetState()
+    voiceCommand.startListening()
+
+    // Watch for voice results
+    voiceJob?.cancel()
+    voiceJob = viewModelScope.launch {
+      voiceCommand.state.collect { voiceState ->
+        when (voiceState) {
+          is VoiceCommandManager.VoiceState.Listening -> {
+            _uiState.update { it.copy(isListening = true) }
+          }
+          is VoiceCommandManager.VoiceState.Result -> {
+            _uiState.update { it.copy(isListening = false, spokenQuestion = voiceState.text) }
+            analyzeWithQuestion(voiceState.text)
+            voiceJob?.cancel()
+          }
+          is VoiceCommandManager.VoiceState.Error -> {
+            _uiState.update { it.copy(isListening = false, lastGeminiResponse = voiceState.message) }
+            voiceJob?.cancel()
+          }
+          is VoiceCommandManager.VoiceState.Idle -> {
+            _uiState.update { it.copy(isListening = false) }
+          }
+        }
+      }
+    }
+  }
+
+  /** Quick analyze without voice — uses default prompt. */
   fun analyzeCurrentFrame() {
+    analyzeWithQuestion("What do you see? Identify any problems and tell me how to fix them step by step.")
+  }
+
+  private fun analyzeWithQuestion(question: String) {
     val currentFrame = _uiState.value.videoFrame ?: return
     if (_uiState.value.isAnalyzing) return
 
@@ -251,12 +297,19 @@ class StreamViewModel(
 
     viewModelScope.launch {
       val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
-      val response = geminiService.analyzeFrame(frameCopy)
+      val response = geminiService.analyzeFrame(frameCopy, question)
       _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
       glassesAudio.speak(response)
       frameCopy.recycle()
     }
   }
+
+  fun cancelListening() {
+    voiceCommand.stopListening()
+    voiceJob?.cancel()
+    _uiState.update { it.copy(isListening = false) }
+  }
+
 
   fun sharePhoto(bitmap: Bitmap) {
     val context = getApplication<Application>()
@@ -401,6 +454,8 @@ class StreamViewModel(
     super.onCleared()
     stopStream()
     glassesAudio.shutdown()
+    voiceCommand.shutdown()
+    voiceJob?.cancel()
     session?.stop()
     session = null
   }

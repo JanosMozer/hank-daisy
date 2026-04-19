@@ -23,5 +23,7 @@ data class StreamUiState(
     val isShareDialogVisible: Boolean = false,
     val isCapturing: Boolean = false,
     val isAnalyzing: Boolean = false,
+    val isListening: Boolean = false,
+    val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
 )

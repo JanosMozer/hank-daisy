@@ -19,13 +19,17 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -85,25 +89,70 @@ fun StreamScreen(
       )
     }
 
-    // Gemini response overlay
+    // Gemini response overlay (scrollable for longer step-by-step responses)
     streamUiState.lastGeminiResponse?.let { response ->
       Box(
           modifier = Modifier
               .align(Alignment.TopCenter)
               .padding(top = 48.dp, start = 16.dp, end = 16.dp)
               .background(
-                  Color.Black.copy(alpha = 0.75f),
+                  Color.Black.copy(alpha = 0.8f),
+                  shape = RoundedCornerShape(16.dp),
+              )
+              .padding(16.dp)
+              .heightIn(max = 300.dp),
+      ) {
+        Column {
+          streamUiState.spokenQuestion?.let { question ->
+            Text(
+                text = "You asked: \"$question\"",
+                color = Color(0xFF38BDF8),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+          }
+          Text(
+              text = response,
+              color = Color.White,
+              fontSize = 13.sp,
+              lineHeight = 18.sp,
+              modifier = Modifier
+                  .fillMaxWidth()
+                  .verticalScroll(rememberScrollState()),
+          )
+        }
+      }
+    }
+
+    // Listening indicator
+    if (streamUiState.isListening) {
+      Box(
+          modifier = Modifier
+              .align(Alignment.TopCenter)
+              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+              .background(
+                  Color(0xFF1E40AF).copy(alpha = 0.9f),
                   shape = RoundedCornerShape(16.dp),
               )
               .padding(16.dp),
       ) {
-        Text(
-            text = response,
-            color = Color.White,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
-        )
+        ) {
+          CircularProgressIndicator(
+              color = Color(0xFF38BDF8),
+              modifier = Modifier.height(20.dp),
+          )
+          Text(
+              text = "\uD83C\uDF99\uFE0F Listening... ask your question",
+              color = Color.White,
+              fontSize = 14.sp,
+              fontWeight = FontWeight.SemiBold,
+          )
+        }
       }
     }
 
@@ -129,7 +178,7 @@ fun StreamScreen(
               modifier = Modifier.height(20.dp),
           )
           Text(
-              text = "Hank is thinking...",
+              text = "Hank is analyzing...",
               color = Color.White,
               fontSize = 14.sp,
               fontWeight = FontWeight.SemiBold,
@@ -158,13 +207,22 @@ fun StreamScreen(
             modifier = Modifier.weight(1f),
         )
 
-        // Ask Hank button
-        SwitchButton(
-            label = "Ask Hank",
-            onClick = { streamViewModel.analyzeCurrentFrame() },
-            enabled = !streamUiState.isAnalyzing,
-            modifier = Modifier.weight(1f),
-        )
+        // Ask Hank button — tapping starts voice listening
+        if (streamUiState.isListening) {
+          SwitchButton(
+              label = "Cancel",
+              onClick = { streamViewModel.cancelListening() },
+              isDestructive = true,
+              modifier = Modifier.weight(1f),
+          )
+        } else {
+          SwitchButton(
+              label = "\uD83C\uDF99\uFE0F Ask Hank",
+              onClick = { streamViewModel.askHank() },
+              enabled = !streamUiState.isAnalyzing,
+              modifier = Modifier.weight(1f),
+          )
+        }
 
         // Photo capture button
         CaptureButton(
