@@ -940,6 +940,17 @@ Technical Terminology Reference:
 """
 
 
+INITIAL_USER_PROMPT = "Perform an initial diagnostic analysis of this frame."
+
+UPDATE_USER_PROMPT = (
+    "New frame from the video stream. "
+    "Update your running diagnosis based on this new visual evidence: "
+    "increase probabilities for findings that are confirmed, decrease or remove those "
+    "no longer supported, and add any newly observed issues. "
+    "Output only the updated diagnostic list."
+)
+
+
 def build_system_prompt() -> str:
     terminology_block = TERMINOLOGY.strip() if TERMINOLOGY else "No terminology provided."
     return SYSTEM_PROMPT.format(terminology=terminology_block)
