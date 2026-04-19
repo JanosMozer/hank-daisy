@@ -77,6 +77,7 @@ class StreamViewModel(
   private var errorJob: Job? = null
   private var sessionStateJob: Job? = null
   private var stream: Stream? = null
+  private val liveStreamServer = LiveStreamServer(8080)
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -114,6 +115,7 @@ class StreamViewModel(
           .onFailure { error, _ -> Log.e(TAG, "Failed to create session: ${error.description}") }
       if (session == null) return
     }
+    liveStreamServer.start()
     startStreamInternal()
   }
 
@@ -195,6 +197,7 @@ class StreamViewModel(
     _uiState.update { INITIAL_STATE }
     stream?.stop()
     stream = null
+    liveStreamServer.stop()
     session?.stop()
     session = null
   }
@@ -277,6 +280,7 @@ class StreamViewModel(
           bitmap,
           videoFrame.presentationTimeUs,
       )
+      liveStreamServer.sendFrame(bitmap)
     } else {
       Log.e(TAG, "Failed to convert YUV to bitmap")
     }
