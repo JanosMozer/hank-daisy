@@ -78,15 +78,38 @@ def _try_open(source: str) -> cv2.VideoCapture | None:
 # ---------------------------------------------------------------------------
 
 def _capture_thread(cap: cv2.VideoCapture, latest_frame: list, lock: threading.Lock,
-                    stream_done: threading.Event) -> None:
-    """Drain the camera buffer continuously. Stores only the most recent frame."""
+                    stream_done: threading.Event, session_dir: Path) -> None:
+    """
+    Drain the camera buffer continuously. Stores only the most recent frame.
+    Also records the complete video stream to session_dir/stream.mp4.
+    """
+    writer = None
+    frame_count = 0
+
     while not stream_done.is_set():
         ok, frame = cap.read()
         if not ok:
             stream_done.set()
             break
+
+        # Initialize VideoWriter on first frame (we need dimensions)
+        if writer is None:
+            h, w = frame.shape[:2]
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            output_path = session_dir / "stream.mp4"
+            writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+            log.info("Recording video to %s", output_path)
+
+        writer.write(frame)
+        frame_count += 1
+
         with lock:
             latest_frame[0] = frame
+
+    if writer:
+        writer.release()
+        log.info("Video recording complete (%d frames written).", frame_count)
 
 
 def _analysis_thread(queue: Queue, session: DiagnosticSession,
@@ -134,7 +157,7 @@ def _process_stream(cap: cv2.VideoCapture, session: DiagnosticSession,
     queue: Queue = Queue(maxsize=queue_depth)
 
     t_capture = threading.Thread(target=_capture_thread,
-                                 args=(cap, latest_frame, lock, stream_done),
+                                 args=(cap, latest_frame, lock, stream_done, session_dir),
                                  daemon=True)
     t_analysis = threading.Thread(target=_analysis_thread,
                                   args=(queue, session, session_dir, stream_done))
