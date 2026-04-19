@@ -41,6 +41,7 @@ android {
     // in Wearables Developer Center
     manifestPlaceholders["mwdat_application_id"] = localProps.getProperty("mwdat_application_id", "")
     manifestPlaceholders["mwdat_client_token"] = localProps.getProperty("mwdat_client_token", "")
+    buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("gemini_api_key", "")}\"")
   }
 
   buildTypes {
@@ -80,6 +81,7 @@ dependencies {
   implementation(libs.mwdat.core)
   implementation(libs.mwdat.camera)
   implementation(libs.mwdat.mockdevice)
+  implementation(libs.google.generativeai)
   androidTestImplementation(libs.androidx.ui.test.junit4)
   androidTestImplementation(libs.androidx.test.uiautomator)
   androidTestImplementation(libs.androidx.test.rules)

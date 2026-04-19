@@ -78,6 +78,8 @@ class StreamViewModel(
   private var sessionStateJob: Job? = null
   private var stream: Stream? = null
   private val liveStreamServer = LiveStreamServer(8080)
+  private val geminiService = GeminiService()
+  private val glassesAudio = GlassesAudioManager(application)
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -241,6 +243,21 @@ class StreamViewModel(
     _uiState.update { it.copy(isShareDialogVisible = false) }
   }
 
+  fun analyzeCurrentFrame() {
+    val currentFrame = _uiState.value.videoFrame ?: return
+    if (_uiState.value.isAnalyzing) return
+
+    _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
+
+    viewModelScope.launch {
+      val frameCopy = currentFrame.copy(currentFrame.config, true)
+      val response = geminiService.analyzeFrame(frameCopy)
+      _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
+      glassesAudio.speak(response)
+      frameCopy.recycle()
+    }
+  }
+
   fun sharePhoto(bitmap: Bitmap) {
     val context = getApplication<Application>()
     val imagesFolder = File(context.cacheDir, "images")
@@ -383,6 +400,7 @@ class StreamViewModel(
   override fun onCleared() {
     super.onCleared()
     stopStream()
+    glassesAudio.shutdown()
     session?.stop()
     session = null
   }
