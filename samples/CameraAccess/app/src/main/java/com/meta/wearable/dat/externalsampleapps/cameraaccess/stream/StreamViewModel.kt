@@ -51,8 +51,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @SuppressLint("AutoCloseableUse")
 class StreamViewModel(
@@ -84,6 +86,7 @@ class StreamViewModel(
   private var voiceJob: Job? = null
   private var audioStatusJob: Job? = null
   private var speakingJob: Job? = null
+  private var teardownJob: Job? = null
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -93,6 +96,21 @@ class StreamViewModel(
       Log.d(TAG, "startStream() called while already streaming — ignoring")
       return
     }
+    viewModelScope.launch {
+      // If a previous session is still tearing down, wait for it. The DAT SDK
+      // doesn't tolerate creating a new session while the previous one is in
+      // STOPPING — it crashes the connection thread.
+      teardownJob?.join()
+      try {
+        startStreamLocked()
+      } catch (e: Exception) {
+        Log.e(TAG, "startStream failed", e)
+        _uiState.update { INITIAL_STATE }
+      }
+    }
+  }
+
+  private fun startStreamLocked() {
     videoJob?.cancel()
     stateJob?.cancel()
     errorJob?.cancel()
@@ -219,6 +237,11 @@ class StreamViewModel(
   }
 
   fun stopStream() {
+    if (session == null && videoJob == null && teardownJob == null) {
+      return
+    }
+    val sessionToTearDown = session
+    session = null
     videoJob?.cancel()
     videoJob = null
     stateJob?.cancel()
@@ -242,8 +265,20 @@ class StreamViewModel(
     speakingJob = null
     glassesAudio.disableGlassesMic()
     StreamForegroundService.stop(getApplication())
-    session?.stop()
-    session = null
+
+    if (sessionToTearDown != null) {
+      teardownJob =
+          viewModelScope.launch {
+            try {
+              sessionToTearDown.stop()
+              withTimeoutOrNull(3000L) {
+                sessionToTearDown.state.first { it == DeviceSessionState.IDLE }
+              }
+            } catch (e: Exception) {
+              Log.w(TAG, "Session teardown error (ignored)", e)
+            }
+          }
+    }
   }
 
   fun capturePhoto() {
