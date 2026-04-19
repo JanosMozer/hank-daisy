@@ -24,6 +24,7 @@ data class StreamUiState(
     val isCapturing: Boolean = false,
     val isAnalyzing: Boolean = false,
     val isListening: Boolean = false,
+    val isWakeWordActive: Boolean = false,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
 )

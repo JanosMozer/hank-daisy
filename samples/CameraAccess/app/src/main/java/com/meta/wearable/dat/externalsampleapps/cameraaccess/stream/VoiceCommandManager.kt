@@ -11,6 +11,8 @@ package com.meta.wearable.dat.externalsampleapps.cameraaccess.stream
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -20,108 +22,244 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Manages voice input via Android SpeechRecognizer.
- * Tap to start listening → captures spoken question → emits result.
+ * Always-on voice command manager with "Hey Hank" wake word detection.
+ *
+ * Continuously listens via SpeechRecognizer. When "Hey Hank" (or just "Hank")
+ * is detected, extracts the question that follows and emits it.
+ * If the wake word is detected alone, starts a focused follow-up listen for the question.
  */
 class VoiceCommandManager(private val context: Context) {
 
     companion object {
         private const val TAG = "CameraAccess:VoiceCmd"
+        private const val RESTART_DELAY_MS = 500L
+
+        // Wake word variations (lowercase for matching)
+        private val WAKE_WORDS = listOf("hey hank", "hank", "hey hunk", "a hank", "hey frank")
     }
 
     sealed interface VoiceState {
-        data object Idle : VoiceState
+        /** Listening passively for wake word */
+        data object Passive : VoiceState
+        /** Wake word detected, listening for the follow-up question */
         data object Listening : VoiceState
-        data class Result(val text: String) : VoiceState
+        /** Question captured, ready for analysis */
+        data class QuestionReady(val text: String) : VoiceState
+        /** Error occurred */
         data class Error(val message: String) : VoiceState
+        /** Not listening at all */
+        data object Off : VoiceState
     }
 
-    private val _state = MutableStateFlow<VoiceState>(VoiceState.Idle)
+    private val _state = MutableStateFlow<VoiceState>(VoiceState.Off)
     val state: StateFlow<VoiceState> = _state.asStateFlow()
 
     private var recognizer: SpeechRecognizer? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var isRunning = false
+    private var isFollowUp = false  // true when we detected wake word, now waiting for question
 
-    fun startListening() {
-        if (_state.value is VoiceState.Listening) return
-
+    /**
+     * Start always-on passive listening for "Hey Hank".
+     * Automatically restarts after timeouts/results.
+     */
+    fun startContinuousListening() {
+        if (isRunning) return
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            _state.value = VoiceState.Error("Speech recognition not available on this device")
+            _state.value = VoiceState.Error("Speech recognition not available")
             return
         }
 
+        isRunning = true
+        isFollowUp = false
+        startRecognizer()
+    }
+
+    /** Stop all listening. */
+    fun stopContinuousListening() {
+        isRunning = false
+        isFollowUp = false
+        handler.removeCallbacksAndMessages(null)
+        destroyRecognizer()
+        _state.value = VoiceState.Off
+    }
+
+    /** Manually trigger question listening (same as tapping "Ask Hank"). */
+    fun startManualListen() {
+        if (_state.value is VoiceState.Listening) return
+        isFollowUp = true
         _state.value = VoiceState.Listening
-
-        recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-            setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    Log.d(TAG, "Ready for speech")
-                }
-
-                override fun onBeginningOfSpeech() {
-                    Log.d(TAG, "Speech started")
-                }
-
-                override fun onRmsChanged(rmsdB: Float) {}
-
-                override fun onBufferReceived(buffer: ByteArray?) {}
-
-                override fun onEndOfSpeech() {
-                    Log.d(TAG, "Speech ended")
-                }
-
-                override fun onError(error: Int) {
-                    val msg = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "Didn't catch that. Try again."
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Try again."
-                        SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
-                        SpeechRecognizer.ERROR_NETWORK -> "Network error"
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-                        else -> "Voice recognition error ($error)"
-                    }
-                    Log.e(TAG, "Recognition error: $msg")
-                    _state.value = VoiceState.Error(msg)
-                }
-
-                override fun onResults(results: Bundle?) {
-                    val matches = results
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull()
-
-                    if (text.isNullOrBlank()) {
-                        _state.value = VoiceState.Error("Didn't catch that. Try again.")
-                    } else {
-                        Log.d(TAG, "Recognized: $text")
-                        _state.value = VoiceState.Result(text)
-                    }
-                }
-
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-        }
-
-        recognizer?.startListening(intent)
+        restartRecognizer()
     }
 
-    fun stopListening() {
-        recognizer?.stopListening()
-        _state.value = VoiceState.Idle
-    }
-
-    fun resetState() {
-        _state.value = VoiceState.Idle
+    /** Reset state after question has been processed. */
+    fun onQuestionHandled() {
+        _state.value = VoiceState.Passive
+        isFollowUp = false
+        if (isRunning) {
+            scheduleRestart()
+        }
     }
 
     fun shutdown() {
-        recognizer?.destroy()
+        stopContinuousListening()
+    }
+
+    // ---- Internal ----
+
+    private fun startRecognizer() {
+        if (!isRunning && !isFollowUp) return
+
+        handler.post {
+            destroyRecognizer()
+
+            if (!isFollowUp) {
+                _state.value = VoiceState.Passive
+            }
+
+            recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                setRecognitionListener(createListener())
+            }
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                if (isFollowUp) {
+                    // Longer silence timeout for follow-up question
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                } else {
+                    // Shorter for passive wake word detection
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                }
+            }
+
+            try {
+                recognizer?.startListening(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start recognizer", e)
+                scheduleRestart()
+            }
+        }
+    }
+
+    private fun createListener() = object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {
+            Log.d(TAG, "Ready (mode=${if (isFollowUp) "follow-up" else "passive"})")
+        }
+
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+
+        override fun onError(error: Int) {
+            when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH,
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    // Normal timeout — just restart
+                    if (isFollowUp) {
+                        Log.d(TAG, "Follow-up timed out, returning to passive")
+                        isFollowUp = false
+                    }
+                    scheduleRestart()
+                }
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
+                    // Already running, wait and retry
+                    scheduleRestart()
+                }
+                else -> {
+                    Log.e(TAG, "Recognition error: $error")
+                    scheduleRestart()
+                }
+            }
+        }
+
+        override fun onResults(results: Bundle?) {
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            handleSpeechResults(matches)
+        }
+
+        override fun onPartialResults(partialResults: Bundle?) {
+            // Check partials for wake word to respond faster
+            if (!isFollowUp) {
+                val partials = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = partials?.firstOrNull()?.lowercase() ?: return
+                if (containsWakeWord(text)) {
+                    Log.d(TAG, "Wake word detected in partial: $text")
+                    // Don't act yet — wait for full results to get the complete utterance
+                }
+            }
+        }
+
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+    }
+
+    private fun handleSpeechResults(matches: List<String>?) {
+        val text = matches?.firstOrNull()?.trim() ?: ""
+        Log.d(TAG, "Result: \"$text\" (followUp=$isFollowUp)")
+
+        if (isFollowUp) {
+            // We were waiting for the question after wake word
+            if (text.isNotBlank()) {
+                Log.d(TAG, "Question captured: $text")
+                _state.value = VoiceState.QuestionReady(text)
+            } else {
+                // Empty result, go back to passive
+                isFollowUp = false
+                scheduleRestart()
+            }
+            return
+        }
+
+        // Passive mode — check for wake word
+        val lowerText = text.lowercase()
+        val wakeWord = WAKE_WORDS.find { lowerText.contains(it) }
+
+        if (wakeWord != null) {
+            // Extract question after the wake word
+            val afterWake = lowerText.substringAfter(wakeWord).trim()
+
+            if (afterWake.length > 3) {
+                // Full utterance: "Hey Hank what's wrong with this engine"
+                // Get the original-case version of the question part
+                val originalAfterWake = text.substring(text.lowercase().indexOf(wakeWord) + wakeWord.length).trim()
+                Log.d(TAG, "Wake + question in one shot: $originalAfterWake")
+                _state.value = VoiceState.QuestionReady(originalAfterWake)
+            } else {
+                // Just "Hey Hank" — switch to follow-up listening
+                Log.d(TAG, "Wake word alone, switching to follow-up listen")
+                isFollowUp = true
+                _state.value = VoiceState.Listening
+                restartRecognizer()
+            }
+        } else {
+            // No wake word, keep listening
+            scheduleRestart()
+        }
+    }
+
+    private fun containsWakeWord(text: String): Boolean {
+        val lower = text.lowercase()
+        return WAKE_WORDS.any { lower.contains(it) }
+    }
+
+    private fun scheduleRestart() {
+        if (!isRunning && !isFollowUp) return
+        handler.postDelayed({ startRecognizer() }, RESTART_DELAY_MS)
+    }
+
+    private fun restartRecognizer() {
+        destroyRecognizer()
+        handler.postDelayed({ startRecognizer() }, 100)
+    }
+
+    private fun destroyRecognizer() {
+        try {
+            recognizer?.destroy()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error destroying recognizer", e)
+        }
         recognizer = null
     }
 }

@@ -187,6 +187,27 @@ fun StreamScreen(
       }
     }
 
+    // Always-on wake word indicator (subtle, bottom-right)
+    if (streamUiState.isWakeWordActive && !streamUiState.isListening && !streamUiState.isAnalyzing && streamUiState.lastGeminiResponse == null) {
+      Box(
+          modifier = Modifier
+              .align(Alignment.TopEnd)
+              .padding(top = 48.dp, end = 16.dp)
+              .background(
+                  Color(0xFF065F46).copy(alpha = 0.85f),
+                  shape = RoundedCornerShape(12.dp),
+              )
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
+        Text(
+            text = "\uD83D\uDFE2 Say \"Hey Hank\"",
+            color = Color(0xFF34D399),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+      }
+    }
+
     Box(modifier = Modifier.fillMaxSize().padding(all = 24.dp)) {
       Row(
           modifier =
@@ -207,7 +228,7 @@ fun StreamScreen(
             modifier = Modifier.weight(1f),
         )
 
-        // Ask Hank button — tapping starts voice listening
+        // Manual Ask Hank (skips wake word, goes straight to listening)
         if (streamUiState.isListening) {
           SwitchButton(
               label = "Cancel",

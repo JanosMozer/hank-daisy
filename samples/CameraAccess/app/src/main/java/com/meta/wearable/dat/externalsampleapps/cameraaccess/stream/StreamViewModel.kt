@@ -120,6 +120,7 @@ class StreamViewModel(
       if (session == null) return
     }
     liveStreamServer.start()
+    startWakeWordListening()
     startStreamInternal()
   }
 
@@ -202,6 +203,9 @@ class StreamViewModel(
     stream?.stop()
     stream = null
     liveStreamServer.stop()
+    voiceCommand.stopContinuousListening()
+    voiceJob?.cancel()
+    voiceJob = null
     session?.stop()
     session = null
   }
@@ -246,42 +250,43 @@ class StreamViewModel(
   }
 
   /**
-   * Start the Ask Hank flow:
-   * 1. Start listening for voice
-   * 2. When speech is recognized, capture current frame
-   * 3. Send frame + spoken question to Gemini
-   * 4. Speak the response through the glasses
+   * Start always-on "Hey Hank" listening.
+   * Called automatically when stream starts.
    */
-  fun askHank() {
-    if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
+  private fun startWakeWordListening() {
+    voiceCommand.startContinuousListening()
 
-    _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
-    voiceCommand.resetState()
-    voiceCommand.startListening()
-
-    // Watch for voice results
     voiceJob?.cancel()
     voiceJob = viewModelScope.launch {
       voiceCommand.state.collect { voiceState ->
         when (voiceState) {
+          is VoiceCommandManager.VoiceState.Passive -> {
+            _uiState.update { it.copy(isListening = false, isWakeWordActive = true) }
+          }
           is VoiceCommandManager.VoiceState.Listening -> {
             _uiState.update { it.copy(isListening = true) }
           }
-          is VoiceCommandManager.VoiceState.Result -> {
+          is VoiceCommandManager.VoiceState.QuestionReady -> {
             _uiState.update { it.copy(isListening = false, spokenQuestion = voiceState.text) }
             analyzeWithQuestion(voiceState.text)
-            voiceJob?.cancel()
           }
           is VoiceCommandManager.VoiceState.Error -> {
-            _uiState.update { it.copy(isListening = false, lastGeminiResponse = voiceState.message) }
-            voiceJob?.cancel()
+            Log.w(TAG, "Voice error: ${voiceState.message}")
+            // Don't show errors in UI for passive mode — just keep listening
           }
-          is VoiceCommandManager.VoiceState.Idle -> {
-            _uiState.update { it.copy(isListening = false) }
+          is VoiceCommandManager.VoiceState.Off -> {
+            _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
           }
         }
       }
     }
+  }
+
+  /** Manual Ask Hank — skips wake word, goes straight to listening for question. */
+  fun askHank() {
+    if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
+    _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
+    voiceCommand.startManualListen()
   }
 
   /** Quick analyze without voice — uses default prompt. */
@@ -301,13 +306,16 @@ class StreamViewModel(
       _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
       glassesAudio.speak(response)
       frameCopy.recycle()
+
+      // Resume wake word listening after response
+      voiceCommand.onQuestionHandled()
     }
   }
 
   fun cancelListening() {
-    voiceCommand.stopListening()
+    voiceCommand.stopContinuousListening()
     voiceJob?.cancel()
-    _uiState.update { it.copy(isListening = false) }
+    _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
   }
 
 
