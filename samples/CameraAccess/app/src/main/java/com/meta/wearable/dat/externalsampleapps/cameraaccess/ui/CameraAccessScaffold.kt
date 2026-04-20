@@ -53,10 +53,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.ActiveJobScreen
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.ClosureReportPdf
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.JobQueueScreen
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.JobViewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +76,9 @@ fun CameraAccessScaffold(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
   val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  val jobViewModel: JobViewModel = viewModel()
+  val jobState by jobViewModel.uiState.collectAsStateWithLifecycle()
+  val activity = LocalActivity.current as? ComponentActivity
 
   // Observe recent errors and show snackbar
   LaunchedEffect(uiState.recentError) {
@@ -85,10 +95,43 @@ fun CameraAccessScaffold(
             StreamScreen(
                 wearablesViewModel = viewModel,
             )
+        uiState.isRegistered && jobState.activeJob != null ->
+            ActiveJobScreen(
+                state = jobState,
+                onBack = { jobViewModel.selectJob(null) },
+                onTechnicianNameChange = jobViewModel::setTechnicianName,
+                onToggleDiag = jobViewModel::toggleDiag,
+                onToggleRepair = jobViewModel::toggleRepair,
+                onToggleVerify = jobViewModel::toggleVerify,
+                onBayNotesChange = jobViewModel::setBayNotes,
+                onStartStream = {
+                    viewModel.navigateToStreaming(onRequestWearablesPermission)
+                },
+                onGenerateClosure = {
+                    val job = jobState.activeJob ?: return@ActiveJobScreen
+                    val repairSteps =
+                        com.meta.wearable.dat.externalsampleapps.cameraaccess.job
+                            .repairStepsForJob(job)
+                    val solution =
+                        repairSteps
+                            .filter { jobState.repairChecked["${job.id}|${it.id}"] == true }
+                            .joinToString("\n") { "• ${it.title}" }
+                            .ifBlank { "(no repair steps checked)" }
+                    val app = activity?.applicationContext ?: return@ActiveJobScreen
+                    ClosureReportPdf.generateAndShare(
+                        context = app,
+                        job = job,
+                        technicianName = jobState.technicianName,
+                        bayNotes = jobState.bayNotes[job.id].orEmpty(),
+                        repairStartedAt = jobState.repairStartedAt[job.id],
+                        solutionText = solution,
+                    )
+                },
+            )
         uiState.isRegistered ->
-            NonStreamScreen(
-                viewModel = viewModel,
-                onRequestWearablesPermission = onRequestWearablesPermission,
+            JobQueueScreen(
+                state = jobState,
+                onSelectJob = { jobViewModel.selectJob(it) },
             )
         else ->
             HomeScreen(
