@@ -48,10 +48,11 @@ val LightPalette =
         Accent = Color(0xFF7C3AED),
         AccentSoft = Color(0xFFEDE9FE),
         AccentOn = Color(0xFFFFFFFF),
-        UserBubble = Color(0xFF2563EB),
+        // Purple-themed chat bubbles (no more generic blue/grey).
+        UserBubble = Color(0xFF7C3AED),       // brand accent
         UserBubbleText = Color(0xFFFFFFFF),
-        HankBubble = Color(0xFFE5E7EB),
-        HankBubbleText = Color(0xFF111827),
+        HankBubble = Color(0xFFEDE9FE),       // soft accent tint
+        HankBubbleText = Color(0xFF4C1D95),   // deep purple text
     )
 
 val DarkPalette =
@@ -66,10 +67,12 @@ val DarkPalette =
         Accent = Color(0xFFA78BFA),
         AccentSoft = Color(0xFF4C1D95),
         AccentOn = Color(0xFF0B0B0D),
-        UserBubble = Color(0xFF3B82F6),
+        // Same purple identity, tuned darker so the bubbles read on a dark
+        // background without glowing.
+        UserBubble = Color(0xFF7C3AED),       // brand accent (kept saturated)
         UserBubbleText = Color(0xFFFFFFFF),
-        HankBubble = Color(0xFF374151),
-        HankBubbleText = Color(0xFFF3F4F6),
+        HankBubble = Color(0xFF312E5A),       // dark, faintly purple-tinted surface
+        HankBubbleText = Color(0xFFEDE9FE),   // very light purple text
     )
 
 val LocalAppPalette = staticCompositionLocalOf { LightPalette }
