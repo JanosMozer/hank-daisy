@@ -203,7 +203,7 @@ fun StreamScreen(
               .padding(horizontal = 12.dp, vertical = 8.dp),
       ) {
         Text(
-            text = "\uD83D\uDFE2 Say \"Hey Hank\"",
+            text = "\uD83D\uDFE2 Hank is listening",
             color = Color(0xFF34D399),
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,

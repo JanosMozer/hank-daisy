@@ -60,7 +60,7 @@ fun ChatPanel(
         if (messages.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "Say \"Hey Hank\" or tap Ask Hank to start.",
+                    text = "Hank's listening — just start talking.",
                     color = Color(0xFF9CA3AF),
                     fontSize = 13.sp,
                 )

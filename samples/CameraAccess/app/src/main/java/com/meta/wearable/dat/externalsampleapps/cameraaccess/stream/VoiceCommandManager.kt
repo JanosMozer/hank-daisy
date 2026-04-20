@@ -37,8 +37,13 @@ class VoiceCommandManager(private val context: Context) {
         /** If no recognizer callback for this long while we think we're
          * listening, the recognizer is presumed dead and force-recreated. */
         private const val MAX_SILENCE_MS = 25_000L
+        /** Min recognised text length before we treat it as a real question;
+         * filters out ambient noise, coughs, and one-syllable noise. */
+        private const val MIN_QUERY_LENGTH = 4
 
-        // Wake word variations (lowercase for matching)
+        // Wake word variations kept for prefix-stripping only — they're no
+        // longer required to trigger Hank, just filtered out if the user
+        // happens to say them out of habit.
         private val WAKE_WORDS = listOf("hey hank", "hank", "hey hunk", "a hank", "hey frank")
     }
 
@@ -279,44 +284,38 @@ class VoiceCommandManager(private val context: Context) {
         val text = matches?.firstOrNull()?.trim() ?: ""
         Log.d(TAG, "Result: \"$text\" (followUp=$isFollowUp)")
 
-        if (isFollowUp) {
-            // We were waiting for the question after wake word
-            if (text.isNotBlank()) {
-                Log.d(TAG, "Question captured: $text")
-                _state.value = VoiceState.QuestionReady(text)
-            } else {
-                // Empty result, go back to passive
+        if (text.length < MIN_QUERY_LENGTH) {
+            // Too short to be a real question (likely ambient noise, a cough,
+            // an "uh", etc.). Don't bother Hank.
+            if (isFollowUp) {
                 isFollowUp = false
-                scheduleRestart()
             }
+            scheduleRestart()
             return
         }
 
-        // Passive mode — check for wake word
+        // Always-on mode: anything substantive the user says is a question.
+        // Strip a leading "Hey Hank" if present (user may still say it out of
+        // habit) but don't require it.
         val lowerText = text.lowercase()
-        val wakeWord = WAKE_WORDS.find { lowerText.contains(it) }
-
-        if (wakeWord != null) {
-            // Extract question after the wake word
-            val afterWake = lowerText.substringAfter(wakeWord).trim()
-
-            if (afterWake.length > 3) {
-                // Full utterance: "Hey Hank what's wrong with this engine"
-                // Get the original-case version of the question part
-                val originalAfterWake = text.substring(text.lowercase().indexOf(wakeWord) + wakeWord.length).trim()
-                Log.d(TAG, "Wake + question in one shot: $originalAfterWake")
-                _state.value = VoiceState.QuestionReady(originalAfterWake)
+        val wakeWord = WAKE_WORDS.find { lowerText.startsWith(it) || lowerText.contains(it) }
+        val question =
+            if (wakeWord != null) {
+                val idx = lowerText.indexOf(wakeWord) + wakeWord.length
+                text.substring(idx).trim().trimStart(',', '.', '!', '?', ':').trim()
             } else {
-                // Just "Hey Hank" — switch to follow-up listening
-                Log.d(TAG, "Wake word alone, switching to follow-up listen")
-                isFollowUp = true
-                _state.value = VoiceState.Listening
-                restartRecognizer()
+                text
             }
-        } else {
-            // No wake word, keep listening
-            scheduleRestart()
+        if (question.length < MIN_QUERY_LENGTH) {
+            // They said only the wake word with no follow-on question.
+            // Treat as a "yes?" prompt — switch to focused follow-up listen.
+            isFollowUp = true
+            _state.value = VoiceState.Listening
+            restartRecognizer()
+            return
         }
+        Log.d(TAG, "Question captured: $question")
+        _state.value = VoiceState.QuestionReady(question)
     }
 
     private fun containsWakeWord(text: String): Boolean {
