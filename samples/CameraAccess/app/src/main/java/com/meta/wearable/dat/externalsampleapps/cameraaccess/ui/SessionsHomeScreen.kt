@@ -46,12 +46,16 @@ import java.util.Locale
  * auto-derived title (first user turn) and description (first Hank reply).
  * A big "+" FAB in the bottom-right starts a new session.
  */
+/**
+ * Chats tab — past sessions + a purple "+" FAB to start a new
+ * text/voice chat (no glasses). The glasses-stream entry point
+ * lives in ConvosScreen.
+ */
 @Composable
 fun SessionsHomeScreen(
     sessions: List<Session>,
     userInitials: String,
     onOpenSession: (String) -> Unit,
-    onNewSession: () -> Unit,
     onNewChatOnly: () -> Unit,
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
@@ -135,41 +139,22 @@ fun SessionsHomeScreen(
             }
         }
 
-        // Two FABs in a column, bottom-right. Top: glasses-free chat;
-        // bottom (primary): "+" new stream session with glasses.
-        Column(
-            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End,
+        // Single purple FAB: start a new text/voice chat (no glasses).
+        // The glasses stream entry point lives in the Convos tab.
+        Box(
+            modifier =
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .size(64.dp)
+                    .background(AppColors.Accent, shape = CircleShape)
+                    .clickable(onClick = onNewChatOnly),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(52.dp)
-                        .background(AppColors.Surface, shape = CircleShape)
-                        .clickable(onClick = onNewChatOnly),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "\uD83D\uDCAC",
-                    fontSize = 22.sp,
-                )
-            }
-            Box(
-                modifier =
-                    Modifier
-                        .size(64.dp)
-                        .background(AppColors.Accent, shape = CircleShape)
-                        .clickable(onClick = onNewSession),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "+",
-                    color = AppColors.AccentOn,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            Text(
+                text = "\uD83D\uDCAC",
+                fontSize = 26.sp,
+            )
         }
     }
 }

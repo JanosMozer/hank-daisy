@@ -236,12 +236,13 @@ private fun MainTabs(
   Column(modifier = Modifier.fillMaxSize()) {
     Box(modifier = Modifier.weight(1f)) {
       when (state.currentTab) {
+        AppTab.CONVOS ->
+            ConvosScreen(onNewSession = { sessionVm.requestNewSession() })
         AppTab.CHATS ->
             SessionsHomeScreen(
                 sessions = state.sessions,
                 userInitials = initialsOf(state.userProfile.name),
                 onOpenSession = { sessionVm.openSession(it) },
-                onNewSession = { sessionVm.requestNewSession() },
                 onNewChatOnly = { sessionVm.openChatOnly() },
                 onOpenProfile = onOpenProfile,
             )

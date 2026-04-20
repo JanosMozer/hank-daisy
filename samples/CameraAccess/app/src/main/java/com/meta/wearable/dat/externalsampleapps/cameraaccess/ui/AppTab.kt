@@ -11,16 +11,23 @@ package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * Bottom-nav destinations. Profile is intentionally NOT a tab — it's a
- * modal opened from the avatar on the Chats home. Making it a tab created
- * a loop where the LaunchedEffect re-opened the profile every time the
- * back button closed it.
+ * Bottom-nav destinations.
+ *  - CONVOS  : entry point for a fresh live, glasses-mediated call.
+ *  - CHATS   : library of past sessions + entry point for a fresh
+ *              text/voice chat (no glasses).
+ *  - TIPS    : onboarding cards.
+ *  - SETTINGS: theme / accessibility / about.
+ *
+ * Profile is intentionally NOT a tab — it's a modal opened from the
+ * avatar on the Chats home (a tab loop bug previously kept reopening it).
  */
 enum class AppTab(val label: String, val icon: ImageVector) {
+    CONVOS("Convos", Icons.Outlined.RecordVoiceOver),
     CHATS("Chats", Icons.Outlined.Forum),
     TIPS("Tips", Icons.Outlined.Lightbulb),
     SETTINGS("Settings", Icons.Outlined.Settings),
