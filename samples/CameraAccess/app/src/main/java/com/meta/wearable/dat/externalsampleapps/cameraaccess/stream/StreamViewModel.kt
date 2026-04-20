@@ -641,6 +641,67 @@ class StreamViewModel(
   }
 
 
+  /**
+   * Export the current session's chat transcript as JSON and open the Android
+   * share sheet so the user can email / AirDrop / Drive it to their laptop,
+   * where the bay UI's "Import session" button will pick it up.
+   *
+   * Schema:
+   *   { "version": 1, "exportedAt": <millis>,
+   *     "messages": [ { "role": "user"|"assistant",
+   *                     "content": "...",
+   *                     "timestamp": <millis> }, ... ] }
+   */
+  fun exportSession() {
+    val messages = _uiState.value.chatMessages
+    if (messages.isEmpty()) {
+      Log.d(TAG, "exportSession(): no messages to export")
+      return
+    }
+    val context = getApplication<Application>()
+    try {
+      val dir = File(context.cacheDir, "sessions")
+      dir.mkdirs()
+      val ts = System.currentTimeMillis()
+      val file = File(dir, "hank-session-$ts.json")
+
+      val root = org.json.JSONObject()
+      root.put("version", 1)
+      root.put("exportedAt", ts)
+      val arr = org.json.JSONArray()
+      for (m in messages) {
+        val o = org.json.JSONObject()
+        o.put("role", if (m.role == ChatMessage.Role.USER) "user" else "assistant")
+        o.put("content", m.text)
+        o.put("timestamp", m.timestamp)
+        arr.put(o)
+      }
+      root.put("messages", arr)
+      file.writeText(root.toString(2))
+
+      val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+      val send =
+          Intent(Intent.ACTION_SEND).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            type = "application/json"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "Hank session ${formatTs(ts)}")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+          }
+      val chooser =
+          Intent.createChooser(send, "Export Hank session").apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+          }
+      context.startActivity(chooser)
+    } catch (e: Exception) {
+      Log.e(TAG, "exportSession failed", e)
+    }
+  }
+
+  private fun formatTs(ts: Long): String {
+    return java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(ts))
+  }
+
   fun sharePhoto(bitmap: Bitmap) {
     val context = getApplication<Application>()
     val imagesFolder = File(context.cacheDir, "images")

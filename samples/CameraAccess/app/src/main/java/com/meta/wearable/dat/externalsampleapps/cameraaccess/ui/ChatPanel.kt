@@ -9,6 +9,7 @@
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
 fun ChatPanel(
     messages: List<ChatMessage>,
     modifier: Modifier = Modifier,
+    onExport: (() -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
 
@@ -73,6 +75,29 @@ fun ChatPanel(
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
                 items(messages) { msg -> Bubble(msg) }
+            }
+            // Small "Export" pill in the top-right corner so the user can
+            // send the session JSON to the bay UI's Import Session button.
+            if (onExport != null) {
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 2.dp, end = 2.dp)
+                            .background(
+                                Color(0xFF374151).copy(alpha = 0.92f),
+                                shape = RoundedCornerShape(10.dp),
+                            )
+                            .clickable { onExport() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "\u2B06 Export",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }

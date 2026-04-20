@@ -97,6 +97,7 @@ fun StreamScreen(
     // Gemini-response overlay so the user sees the full back-and-forth.
     ChatPanel(
         messages = streamUiState.chatMessages,
+        onExport = { streamViewModel.exportSession() },
         modifier =
             Modifier
                 .align(Alignment.TopCenter)

@@ -31,8 +31,54 @@ export function HankAdvisor({ context, variant = "modal", onClose }: Props) {
   const [attachError, setAttachError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState<"live" | "fallback" | "fallback_error" | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const sessionFileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Import a Hank session JSON exported by the Android glasses app.
+   * Schema: { version: 1, exportedAt, messages: [{role, content, timestamp}] }
+   * Inserts a visible divider + the imported turns into the current chat.
+   */
+  const importSession = useCallback(async (file: File) => {
+    setImportError(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as {
+        version?: number;
+        exportedAt?: number;
+        messages?: { role?: string; content?: string }[];
+      };
+      const incoming = Array.isArray(parsed.messages) ? parsed.messages : [];
+      if (incoming.length === 0) {
+        setImportError("No messages in that file.");
+        return;
+      }
+      const safeMessages: HankMessage[] = incoming
+        .filter(
+          (m): m is { role: string; content: string } =>
+            typeof m?.role === "string" &&
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m?.content === "string",
+        )
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+      if (safeMessages.length === 0) {
+        setImportError("File didn't contain valid Hank messages.");
+        return;
+      }
+      const stamp = parsed.exportedAt
+        ? new Date(parsed.exportedAt).toLocaleString()
+        : "unknown time";
+      const divider: HankMessage = {
+        role: "assistant",
+        content: `── Glasses session imported (${safeMessages.length} turns, exported ${stamp}) ──`,
+      };
+      setMessages((m) => [...m, divider, ...safeMessages]);
+    } catch (e) {
+      setImportError("Couldn't parse that JSON file.");
+    }
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -216,7 +262,28 @@ export function HankAdvisor({ context, variant = "modal", onClose }: Props) {
           >
             Photo
           </button>
+          <input
+            ref={sessionFileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hank-file-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importSession(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            className="hank-attach-btn"
+            onClick={() => sessionFileRef.current?.click()}
+            disabled={loading}
+            title="Import a Hank session JSON exported from the glasses Android app"
+          >
+            Import session
+          </button>
         </div>
+        {importError && <p className="hank-attach-error">{importError}</p>}
 
         <textarea
           className="hank-input"
