@@ -30,8 +30,8 @@ import kotlin.math.sqrt
  */
 class BargeInDetector(
     private val onUserSpeaking: () -> Unit,
-    private val rmsThreshold: Double = 1800.0,
-    private val triggerMs: Long = 250L,
+    private val rmsThreshold: Double = 2000.0,
+    private val triggerMs: Long = 500L,
 ) {
     companion object {
         private const val TAG = "CameraAccess:BargeIn"

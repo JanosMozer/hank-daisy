@@ -460,8 +460,8 @@ class StreamViewModel(
           // Append both sides of the turn to history so Hank remembers it.
           conversationHistory.add(GeminiService.Turn("user", question))
           conversationHistory.add(GeminiService.Turn("assistant", response))
-          // Trim if it gets unwieldy — keep last 12 turns (~6 exchanges).
-          while (conversationHistory.size > 12) {
+          // Trim if it gets unwieldy — keep last 24 turns (~12 exchanges).
+          while (conversationHistory.size > 24) {
             conversationHistory.removeAt(0)
           }
 
