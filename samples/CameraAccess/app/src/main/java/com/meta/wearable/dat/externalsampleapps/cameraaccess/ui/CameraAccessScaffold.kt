@@ -95,6 +95,13 @@ fun CameraAccessScaffold(
             StreamScreen(
                 wearablesViewModel = viewModel,
             )
+        uiState.isRegistered &&
+            jobState.activeJob != null &&
+            jobState.chatHistoryOpen ->
+            ChatHistoryScreen(
+                wearablesViewModel = viewModel,
+                onBack = { jobViewModel.closeChatHistory() },
+            )
         uiState.isRegistered && jobState.activeJob != null ->
             ActiveJobScreen(
                 state = jobState,
@@ -104,6 +111,7 @@ fun CameraAccessScaffold(
                 onStartStream = {
                     viewModel.navigateToStreaming(onRequestWearablesPermission)
                 },
+                onOpenChatHistory = { jobViewModel.openChatHistory() },
                 onGenerateClosure = {
                     val job = jobState.activeJob ?: return@ActiveJobScreen
                     val app = activity?.applicationContext ?: return@ActiveJobScreen

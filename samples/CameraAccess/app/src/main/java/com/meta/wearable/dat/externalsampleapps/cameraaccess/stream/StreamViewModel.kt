@@ -350,16 +350,10 @@ class StreamViewModel(
               }
             } else {
               bargeInDetector.stop()
-              // After Hank finishes speaking (naturally OR via barge-in),
-              // always resume listening. Mid-conversation we use follow-up
-              // mode for snappier turn-taking; if somehow we're not in a
-              // conversation, fall back to general continuous listening so
-              // the app never silently "stops hearing" the user.
-              if (conversationHistory.isNotEmpty()) {
-                voiceCommand.startConversationFollowUp()
-              } else {
-                voiceCommand.startContinuousListening()
-              }
+              // Always resume listening the moment TTS ends — no branching on
+              // "is this mid-conversation". Steady = always ready for the
+              // user's next word.
+              voiceCommand.startConversationFollowUp()
             }
           }
         }

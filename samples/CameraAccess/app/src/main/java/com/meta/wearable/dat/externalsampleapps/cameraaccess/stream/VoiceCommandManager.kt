@@ -32,14 +32,23 @@ class VoiceCommandManager(private val context: Context) {
 
     companion object {
         private const val TAG = "CameraAccess:VoiceCmd"
-        private const val RESTART_DELAY_MS = 500L
+        /** Gap between recognizer cycles — kept very short so the user almost
+         * never talks into a dead window. */
+        private const val RESTART_DELAY_MS = 150L
         private const val WATCHDOG_INTERVAL_MS = 10_000L
         /** If no recognizer callback for this long while we think we're
          * listening, the recognizer is presumed dead and force-recreated. */
         private const val MAX_SILENCE_MS = 25_000L
-        /** Min recognised text length before we treat it as a real question;
-         * filters out ambient noise, coughs, and one-syllable noise. */
-        private const val MIN_QUERY_LENGTH = 4
+        /** Min recognised text length before we treat it as a real question.
+         * Low enough that short replies like "yes" / "no" / "now" count;
+         * filters out one-character noise fragments from the recognizer. */
+        private const val MIN_QUERY_LENGTH = 2
+        /** Silence before the recognizer decides the user finished speaking.
+         * Same for every cycle now — no wake-word mode vs. follow-up mode
+         * distinction. Long enough that natural thinking pauses don't end
+         * the turn prematurely. */
+        private const val END_SILENCE_MS = 4_000L
+        private const val MAYBE_END_SILENCE_MS = 2_200L
 
         // Wake word variations kept for prefix-stripping only — they're no
         // longer required to trigger Hank, just filtered out if the user
@@ -202,15 +211,11 @@ class VoiceCommandManager(private val context: Context) {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                if (isFollowUp) {
-                    // Longer silence timeout for follow-up question — gives the user
-                    // time to think mid-sentence without cutting them off.
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
-                } else {
-                    // Shorter for passive wake word detection
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
-                }
+                // Same forgiving timeouts whether this cycle was kicked off
+                // fresh, after TTS, or as a restart — we want a uniformly
+                // steady conversational feel with no cold starts.
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, END_SILENCE_MS)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, MAYBE_END_SILENCE_MS)
             }
 
             try {

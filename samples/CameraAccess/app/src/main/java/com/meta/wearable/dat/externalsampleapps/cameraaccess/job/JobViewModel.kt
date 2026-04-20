@@ -26,6 +26,8 @@ data class JobUiState(
     /** Keyed by jobId. */
     val bayNotes: Map<String, String> = emptyMap(),
     val repairStartedAt: Map<String, Long> = emptyMap(),
+    /** True when the full-screen ChatHistoryScreen is showing. */
+    val chatHistoryOpen: Boolean = false,
 ) {
     val activeJob: WorkOrder?
         get() = jobs.firstOrNull { it.id == selectedJobId }
@@ -58,4 +60,7 @@ class JobViewModel : ViewModel() {
             state.copy(bayNotes = state.bayNotes + (jobId to text))
         }
     }
+
+    fun openChatHistory() = _uiState.update { it.copy(chatHistoryOpen = true) }
+    fun closeChatHistory() = _uiState.update { it.copy(chatHistoryOpen = false) }
 }

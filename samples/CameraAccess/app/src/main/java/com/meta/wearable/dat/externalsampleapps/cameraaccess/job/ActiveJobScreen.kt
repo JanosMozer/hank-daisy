@@ -51,6 +51,7 @@ fun ActiveJobScreen(
     onTechnicianNameChange: (String) -> Unit,
     onBayNotesChange: (String) -> Unit,
     onStartStream: () -> Unit,
+    onOpenChatHistory: () -> Unit,
     onGenerateClosure: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -157,6 +158,14 @@ fun ActiveJobScreen(
             text = "📹  Start live stream + Hank chat",
             onClick = onStartStream,
             bg = Color(0xFF4C1D95),
+            fg = Color.White,
+        )
+
+        Spacer(Modifier.height(10.dp))
+        PrimaryButton(
+            text = "💬  View full conversation",
+            onClick = onOpenChatHistory,
+            bg = Color(0xFF1F2937),
             fg = Color.White,
         )
 
