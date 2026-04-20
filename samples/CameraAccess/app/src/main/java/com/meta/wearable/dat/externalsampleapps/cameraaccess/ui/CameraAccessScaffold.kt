@@ -142,6 +142,7 @@ fun CameraAccessScaffold(
           sessionState.profileOpen ->
               ProfileScreen(
                   profile = sessionState.userProfile,
+                  sessionCount = sessionState.sessions.size,
                   onBack = { sessionVm.closeProfile() },
                   onSave = { sessionVm.updateProfile(it) },
               )
@@ -242,6 +243,7 @@ private fun MainTabs(
             SessionsHomeScreen(
                 sessions = state.sessions,
                 userInitials = initialsOf(state.userProfile.name),
+                avatarColor = state.userProfile.avatarColor,
                 onOpenSession = { sessionVm.openSession(it) },
                 onNewChatOnly = { sessionVm.openChatOnly() },
                 onOpenProfile = onOpenProfile,

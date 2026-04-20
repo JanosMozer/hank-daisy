@@ -55,6 +55,7 @@ import java.util.Locale
 fun SessionsHomeScreen(
     sessions: List<Session>,
     userInitials: String,
+    avatarColor: Long,
     onOpenSession: (String) -> Unit,
     onNewChatOnly: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -93,13 +94,13 @@ fun SessionsHomeScreen(
                     modifier =
                         Modifier
                             .size(44.dp)
-                            .background(AppColors.Accent, shape = CircleShape)
+                            .background(Color(avatarColor), shape = CircleShape)
                             .clickable(onClick = onOpenProfile),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = userInitials.ifBlank { "?" },
-                        color = AppColors.AccentOn,
+                        color = Color.White,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                     )

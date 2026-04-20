@@ -248,6 +248,17 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                 name = o.optString("name"),
                 role = o.optString("role"),
                 email = o.optString("email"),
+                pronouns = o.optString("pronouns"),
+                bio = o.optString("bio"),
+                avatarColor = o.optLong("avatarColor", AvatarColors.first()),
+                hankPersona =
+                    runCatching { HankPersona.valueOf(o.optString("hankPersona", "MECHANIC")) }
+                        .getOrDefault(HankPersona.MECHANIC),
+                verbosity =
+                    runCatching { Verbosity.valueOf(o.optString("verbosity", "NORMAL")) }
+                        .getOrDefault(Verbosity.NORMAL),
+                useMyName = o.optBoolean("useMyName", true),
+                createdAt = o.optLong("createdAt", 0L),
             )
         } catch (_: Exception) {
             UserProfile()
@@ -255,12 +266,24 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun persistProfile(p: UserProfile) {
+        val withCreatedAt =
+            if (p.createdAt == 0L) p.copy(createdAt = System.currentTimeMillis()) else p
         val o =
             JSONObject()
-                .put("name", p.name)
-                .put("role", p.role)
-                .put("email", p.email)
+                .put("name", withCreatedAt.name)
+                .put("role", withCreatedAt.role)
+                .put("email", withCreatedAt.email)
+                .put("pronouns", withCreatedAt.pronouns)
+                .put("bio", withCreatedAt.bio)
+                .put("avatarColor", withCreatedAt.avatarColor)
+                .put("hankPersona", withCreatedAt.hankPersona.name)
+                .put("verbosity", withCreatedAt.verbosity.name)
+                .put("useMyName", withCreatedAt.useMyName)
+                .put("createdAt", withCreatedAt.createdAt)
         prefs.edit().putString(KEY_PROFILE, o.toString()).apply()
+        if (withCreatedAt !== p) {
+            _uiState.update { it.copy(userProfile = withCreatedAt) }
+        }
     }
 
     private fun sessionToJson(s: Session): JSONObject {
