@@ -43,7 +43,6 @@ object ClosureReportPdf {
         technicianName: String,
         bayNotes: String,
         repairStartedAt: Long?,
-        solutionText: String,
     ) {
         try {
             val dir = File(context.cacheDir, "sessions")
@@ -103,13 +102,16 @@ object ClosureReportPdf {
                 y = section(canvas, heading, body, "Repair timeline", "$started  →  $ended  (${elapsed})", y)
             }
 
-            // Solution
-            y = section(canvas, heading, body, "Solution / work performed", solutionText.ifBlank { "(none documented)" }, y)
-
-            // Bay notes
-            if (bayNotes.isNotBlank()) {
-                y = section(canvas, heading, body, "Bay notes", bayNotes, y)
-            }
+            // Work performed / bay notes — single free-form block.
+            y =
+                section(
+                    canvas,
+                    heading,
+                    body,
+                    "Work performed",
+                    bayNotes.ifBlank { "(not documented)" },
+                    y,
+                )
 
             // Footer
             y = (PAGE_H - MARGIN - 16f)

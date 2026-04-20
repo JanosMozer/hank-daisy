@@ -9,8 +9,10 @@
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.job
 
 /**
- * Data model ported from the `ui/` bay UI's `jobs.ts`. Keeps field names
- * identical so a JSON export between the two is interchangeable.
+ * Data model for ROs. The bay UI's checklist types (DiagStep / RepairStep /
+ * VerifyItem) were removed — the mechanic works by talking to Hank and
+ * writing free-form bay notes, not by ticking pre-filled dealership
+ * procedure boxes.
  */
 
 enum class JobStatus(val label: String, val color: Long) {
@@ -37,9 +39,3 @@ data class WorkOrder(
     val status: JobStatus,
     val dtcs: List<DtcRow>,
 )
-
-data class RepairStep(val id: String, val title: String, val detail: String)
-
-data class VerifyItem(val id: String, val label: String)
-
-data class DiagStep(val title: String, val body: String, val pitfall: String)

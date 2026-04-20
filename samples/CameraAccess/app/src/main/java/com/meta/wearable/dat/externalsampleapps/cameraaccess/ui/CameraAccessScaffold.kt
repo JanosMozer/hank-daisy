@@ -100,23 +100,12 @@ fun CameraAccessScaffold(
                 state = jobState,
                 onBack = { jobViewModel.selectJob(null) },
                 onTechnicianNameChange = jobViewModel::setTechnicianName,
-                onToggleDiag = jobViewModel::toggleDiag,
-                onToggleRepair = jobViewModel::toggleRepair,
-                onToggleVerify = jobViewModel::toggleVerify,
                 onBayNotesChange = jobViewModel::setBayNotes,
                 onStartStream = {
                     viewModel.navigateToStreaming(onRequestWearablesPermission)
                 },
                 onGenerateClosure = {
                     val job = jobState.activeJob ?: return@ActiveJobScreen
-                    val repairSteps =
-                        com.meta.wearable.dat.externalsampleapps.cameraaccess.job
-                            .repairStepsForJob(job)
-                    val solution =
-                        repairSteps
-                            .filter { jobState.repairChecked["${job.id}|${it.id}"] == true }
-                            .joinToString("\n") { "• ${it.title}" }
-                            .ifBlank { "(no repair steps checked)" }
                     val app = activity?.applicationContext ?: return@ActiveJobScreen
                     ClosureReportPdf.generateAndShare(
                         context = app,
@@ -124,7 +113,6 @@ fun CameraAccessScaffold(
                         technicianName = jobState.technicianName,
                         bayNotes = jobState.bayNotes[job.id].orEmpty(),
                         repairStartedAt = jobState.repairStartedAt[job.id],
-                        solutionText = solution,
                     )
                 },
             )
