@@ -91,6 +91,13 @@ class ElevenLabsTtsService(
 
     fun stop() {
         synchronized(queue) { queue.clear() }
+        // Silence FIRST — MediaPlayer.stop() has a flush lag where buffered
+        // audio keeps coming out for ~150-300ms. setVolume(0) is instant
+        // because it's applied in the mixer, so the user perceives the cut
+        // immediately even though the stop/release happens a beat later.
+        try {
+            currentPlayer?.setVolume(0f, 0f)
+        } catch (_: Exception) {}
         consumerJob?.cancel()
         consumerJob = null
         try {

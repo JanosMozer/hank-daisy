@@ -30,8 +30,12 @@ import kotlin.math.sqrt
  */
 class BargeInDetector(
     private val onUserSpeaking: () -> Unit,
-    private val rmsThreshold: Double = 900.0,
-    private val triggerMs: Long = 130L,
+    // Tuned for fast interrupt: 600 RMS is low enough that a normal-volume
+    // first syllable crosses it reliably, AEC still filters Hank's own
+    // voice. 90ms trigger means we fire ~40ms sooner than before without
+    // becoming jumpy on keyboard clicks / throat clears.
+    private val rmsThreshold: Double = 600.0,
+    private val triggerMs: Long = 90L,
 ) {
     companion object {
         private const val TAG = "CameraAccess:BargeIn"

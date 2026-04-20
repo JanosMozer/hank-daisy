@@ -44,11 +44,15 @@ class VoiceCommandManager(private val context: Context) {
          * filters out one-character noise fragments from the recognizer. */
         private const val MIN_QUERY_LENGTH = 2
         /** Silence before the recognizer decides the user finished speaking.
-         * Same for every cycle now — no wake-word mode vs. follow-up mode
-         * distinction. Long enough that natural thinking pauses don't end
-         * the turn prematurely. */
-        private const val END_SILENCE_MS = 4_000L
-        private const val MAYBE_END_SILENCE_MS = 2_200L
+         * Tuned down from 4000/2200 to 1500/900: natural conversational
+         * pauses are under 1 second, so 4s was adding a flat ~2.5s of dead
+         * air to every turn before we even kicked off the LLM call. At 1.5s
+         * mid-sentence thinking pauses ("uh... let me think...") still hold
+         * the turn, but normal turn-ends dispatch in ~1s instead of ~4s.
+         * MAYBE value is the faster of the two — it's what fires when the
+         * recognizer is already confident you're done. */
+        private const val END_SILENCE_MS = 1_500L
+        private const val MAYBE_END_SILENCE_MS = 900L
 
         // Wake word variations kept for prefix-stripping only — they're no
         // longer required to trigger Hank, just filtered out if the user
