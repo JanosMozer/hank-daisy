@@ -217,13 +217,13 @@ class GlassesAudioManager(private val context: Context) {
         }
     }
 
-    /** Split a reply on sentence boundaries so each chunk is short enough that
-     * stop() can cancel the remainder responsively. */
+    /** Split a reply on clause boundaries (sentence-ends AND commas/semicolons)
+     * so each chunk is short enough that stop() can cancel the remainder
+     * within ~one clause's audio buffer instead of one whole sentence. */
     private fun splitForTts(text: String): List<String> {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return emptyList()
-        // Split on . ! ? followed by space or end, keeping the punctuation.
-        val regex = Regex("(?<=[.!?])\\s+")
+        val regex = Regex("(?<=[.!?,;:])\\s+")
         return trimmed.split(regex).map { it.trim() }.filter { it.isNotEmpty() }
     }
 

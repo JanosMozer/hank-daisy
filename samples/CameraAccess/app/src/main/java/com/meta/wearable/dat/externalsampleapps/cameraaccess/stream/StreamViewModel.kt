@@ -19,10 +19,12 @@ package com.meta.wearable.dat.externalsampleapps.cameraaccess.stream
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
@@ -111,11 +113,32 @@ class StreamViewModel(
             // Posted from a worker thread — bounce to main + viewModelScope.
             viewModelScope.launch {
               Log.d(TAG, "Barge-in detected — cutting Hank off")
+              hapticInterruptCue()
               glassesAudio.stopSpeaking()
               voiceCommand.startConversationFollowUp()
             }
           },
       )
+
+  /** Tiny vibration so the user knows we heard them and can speak now —
+   * masks the ~200ms gap before the recognizer is actually capturing. */
+  private fun hapticInterruptCue() {
+    try {
+      val app = getApplication<Application>()
+      val vibrator =
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
+                    as android.os.VibratorManager)
+                .defaultVibrator
+          } else {
+            @Suppress("DEPRECATION")
+            app.getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+          }
+      vibrator.vibrate(android.os.VibrationEffect.createOneShot(40L, 80))
+    } catch (_: Exception) {
+      // not critical
+    }
+  }
 
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
@@ -316,11 +339,10 @@ class StreamViewModel(
             // hand the mic to BargeInDetector, which CAN (via AEC).
             voiceCommand.setMuted(speaking)
             if (speaking) {
-              // Give SpeechRecognizer's destroy() a moment to actually release
-              // the mic before BargeInDetector tries to grab it. Without this
-              // delay, the AudioRecord opens but read() returns silence for
-              // the first ~200ms because the mic is still held.
-              kotlinx.coroutines.delay(250)
+              // Brief delay so SpeechRecognizer.destroy() releases the mic
+              // before BargeInDetector tries to grab it; shorter is better
+              // because every ms here is a ms before barge-in can fire.
+              kotlinx.coroutines.delay(80)
               if (glassesAudio.isSpeaking.value) {
                 bargeInDetector.start()
               }
