@@ -12,11 +12,14 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.GeminiService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,6 +47,8 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
 
     private val prefs =
         application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private val gemini = GeminiService()
 
     private val _uiState =
         MutableStateFlow(
@@ -143,11 +148,61 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
 
     fun saveStreamSession(messages: List<ChatMessage>) {
         if (messages.isEmpty()) return
+        // Save immediately with a fallback (first-line) title so the user sees
+        // the card right away; then ask Gemini to propose a better title in
+        // the background and swap it in when it returns.
         val session = Session.from(messages)
         _uiState.update { state -> state.copy(sessions = listOf(session) + state.sessions) }
         persistSessions(_uiState.value.sessions)
-        // Clear the in-flight draft now that the session is saved cleanly.
         prefs.edit().remove("draft_chat").apply()
+        generateAiTitleAsync(session.id, messages)
+    }
+
+    private fun generateAiTitleAsync(sessionId: String, messages: List<ChatMessage>) {
+        viewModelScope.launch {
+            val title =
+                try {
+                    val prompt =
+                        "Generate a short, descriptive title for the conversation below. " +
+                            "Rules: 3 to 6 words, no quotes, no punctuation at the end, " +
+                            "no prefixes like 'Chat about'. Reply with ONLY the title."
+                    val history =
+                        messages.map {
+                            GeminiService.Turn(
+                                role = if (it.role == ChatMessage.Role.USER) "user" else "assistant",
+                                text = it.text,
+                            )
+                        }
+                    val raw =
+                        gemini.analyzeFrame(
+                            bitmap = null,
+                            userQuestion = prompt,
+                            history = history,
+                        )
+                    sanitiseTitle(raw)
+                } catch (e: Exception) {
+                    Log.w(TAG, "AI title generation failed", e)
+                    ""
+                }
+            if (title.isBlank()) return@launch
+            _uiState.update { state ->
+                state.copy(
+                    sessions =
+                        state.sessions.map {
+                            if (it.id == sessionId) it.copy(title = title) else it
+                        },
+                )
+            }
+            persistSessions(_uiState.value.sessions)
+        }
+    }
+
+    private fun sanitiseTitle(raw: String): String {
+        val firstLine = raw.lineSequence().firstOrNull { it.isNotBlank() } ?: return ""
+        return firstLine
+            .trim()
+            .trim('"', '\'', '`', '*', '#', '.', ':', '—', '-', ' ')
+            .take(60)
     }
 
     fun deleteSession(id: String) {
