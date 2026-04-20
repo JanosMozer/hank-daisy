@@ -12,7 +12,12 @@ import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
 
 /**
  * A completed Hank session: a conversation plus an auto-derived title and
- * short description for the home list. Replaces the dealership RO concept.
+ * short description for the home list.
+ *
+ * [orderId] is set when the session was started from inside an open
+ * repair order; null for free-form Convos/Chats sessions. One-way link —
+ * orders never mutate when sessions are added; the orders list derives
+ * "my sessions" with a filter pass.
  */
 data class Session(
     val id: String,
@@ -20,9 +25,10 @@ data class Session(
     val title: String,
     val description: String,
     val messages: List<ChatMessage>,
+    val orderId: String? = null,
 ) {
     companion object {
-        fun from(messages: List<ChatMessage>): Session {
+        fun from(messages: List<ChatMessage>, orderId: String? = null): Session {
             val firstUser = messages.firstOrNull { it.role == ChatMessage.Role.USER }
             val firstHank = messages.firstOrNull { it.role == ChatMessage.Role.ASSISTANT }
             val title =
@@ -39,6 +45,7 @@ data class Session(
                 title = title,
                 description = description,
                 messages = messages,
+                orderId = orderId,
             )
         }
     }

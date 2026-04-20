@@ -172,7 +172,7 @@ fun ChatOnlyScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 ) {
-                    items(state.chatMessages) { msg -> ChatRow(msg) }
+                    items(state.chatMessages) { msg -> ChatTurn(msg) }
                     item { Spacer(Modifier.height(16.dp)) }
                 }
             }
@@ -250,45 +250,3 @@ fun ChatOnlyScreen(
     }
 }
 
-@Composable
-private fun ChatRow(message: ChatMessage) {
-    val isUser = message.role == ChatMessage.Role.USER
-    val bg = if (isUser) AppColors.UserBubble else AppColors.HankBubble
-    val fg = if (isUser) AppColors.UserBubbleText else AppColors.HankBubbleText
-    val align = if (isUser) Alignment.End else Alignment.Start
-    val label = if (isUser) "You" else "Hank"
-    val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(message.timestamp))
-
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = align) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!isUser) {
-                Text(label, color = AppColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.width(6.dp))
-                Text(ts, color = AppColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-            } else {
-                Text(ts, color = AppColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                Spacer(Modifier.width(6.dp))
-                Text(label, color = AppColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Spacer(Modifier.height(3.dp))
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth(0.9f)
-                    .background(
-                        bg,
-                        shape =
-                            RoundedCornerShape(
-                                topStart = 14.dp,
-                                topEnd = 14.dp,
-                                bottomStart = if (isUser) 14.dp else 4.dp,
-                                bottomEnd = if (isUser) 4.dp else 14.dp,
-                            ),
-                    )
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            Text(text = message.text, color = fg, fontSize = 14.sp, lineHeight = 20.sp)
-        }
-    }
-}

@@ -155,6 +155,69 @@ fun CameraAccessScaffold(
                   onBack = { sessionVm.closeProfile() },
                   onSave = { sessionVm.updateProfile(it) },
               )
+          sessionState.newOrderSheetOpen ->
+              NewOrderScreen(
+                  onCancel = { sessionVm.closeNewOrderSheet() },
+                  onCreate = { order ->
+                    sessionVm.createOrder(order)
+                    sessionVm.closeNewOrderSheet()
+                    // Jump straight into the detail view — feels more
+                    // direct than bouncing back to the list after create.
+                    sessionVm.openOrder(order.id)
+                  },
+              )
+          sessionState.viewingOrderId != null -> {
+            val order =
+                sessionState.orders.firstOrNull { it.id == sessionState.viewingOrderId }
+            if (order != null) {
+              val orderSessions =
+                  sessionState.sessions.filter { it.orderId == order.id }
+              val ctx = activity?.applicationContext
+              OrderDetailScreen(
+                  order = order,
+                  sessions = orderSessions,
+                  onBack = { sessionVm.closeOrderDetail() },
+                  onStartDiagnosis = {
+                    // Tag the next saved session to this order, then kick
+                    // off the glasses stream. When the stream ends we
+                    // land back here automatically because viewingOrderId
+                    // is still set.
+                    sessionVm.setActiveOrder(order.id)
+                    viewModel.navigateToStreaming(onRequestWearablesPermission)
+                  },
+                  onOpenSession = { sessionVm.openSession(it) },
+                  onUpdateOrder = { sessionVm.updateOrder(it) },
+                  onCloseOrder = { sessionVm.closeOrder(order.id) },
+                  onReopenOrder = { sessionVm.reopenOrder(order.id) },
+                  onDeleteOrder = {
+                    sessionVm.deleteOrder(order.id)
+                    sessionVm.closeOrderDetail()
+                  },
+                  onGenerateReport =
+                      if (ctx != null) {
+                        {
+                          scope.launch {
+                            OrderReportPdf.generateAndShare(
+                                context = ctx,
+                                order = order,
+                                sessions = orderSessions,
+                                gemini = geminiService,
+                            )
+                          }
+                        }
+                      } else null,
+              )
+            } else {
+              // Order deleted from under us — bail back to the tabs.
+              sessionVm.closeOrderDetail()
+              MainTabs(
+                  sessionVm = sessionVm,
+                  onOpenProfile = { sessionVm.openProfile() },
+                  onStartStream = startGlassesStream,
+                  isStreamingNow = uiState.isStreaming,
+              )
+            }
+          }
           sessionState.viewingSessionId != null -> {
             val session =
                 sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
@@ -270,7 +333,13 @@ private fun MainTabs(
                 onNewChatOnly = { sessionVm.openChatOnly() },
                 onOpenProfile = onOpenProfile,
             )
-        AppTab.TIPS -> TipsScreen()
+        AppTab.ORDERS ->
+            OrdersScreen(
+                orders = state.orders,
+                openSessionCount = { id -> state.sessions.count { it.orderId == id } },
+                onOpenOrder = { sessionVm.openOrder(it) },
+                onNewOrder = { sessionVm.openNewOrderSheet() },
+            )
         AppTab.SETTINGS ->
             SettingsScreen(
                 settings = state.settings,

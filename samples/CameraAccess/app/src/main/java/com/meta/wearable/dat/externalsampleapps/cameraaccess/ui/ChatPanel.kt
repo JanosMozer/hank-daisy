@@ -34,10 +34,14 @@ import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
 
 /**
- * ChatGPT-style scrollable conversation history.
- * - User messages right-aligned, blue.
- * - Hank's messages left-aligned, dark gray.
- * - Auto-scrolls to the bottom when new messages arrive.
+ * Live conversation overlay on top of the camera feed.
+ *
+ * Renders each turn through [ChatTurn] with `forOverlay=true` — Hank's
+ * side becomes structured diagnostic cards (step headers, callouts,
+ * tables), the tech's side stays as a compact bubble. The outer black-
+ * tinted container gives the cards contrast against the live video.
+ *
+ * Auto-scrolls to the bottom whenever a new turn comes in.
  */
 @Composable
 fun ChatPanel(
@@ -56,8 +60,8 @@ fun ChatPanel(
     Box(
         modifier =
             modifier
-                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
-                .padding(8.dp),
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                .padding(10.dp),
     ) {
         if (messages.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -71,10 +75,10 @@ fun ChatPanel(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
-                items(messages) { msg -> Bubble(msg) }
+                items(messages) { msg -> ChatTurn(msg, forOverlay = true) }
             }
             // Small "Export" pill in the top-right corner so the user can
             // send the session JSON to the bay UI's Import Session button.
@@ -98,52 +102,6 @@ fun ChatPanel(
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun Bubble(message: ChatMessage) {
-    val isUser = message.role == ChatMessage.Role.USER
-    val bg = if (isUser) Color(0xFF2563EB) else Color(0xFF1F2937)
-    val align = if (isUser) Alignment.End else Alignment.Start
-    val label = if (isUser) "You" else "Hank"
-    val labelColor = if (isUser) Color(0xFFBFDBFE) else Color(0xFF9CA3AF)
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = align,
-    ) {
-        Text(
-            text = label,
-            color = labelColor,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start) {
-            Box(
-                modifier =
-                    Modifier
-                        .background(
-                            bg,
-                            shape =
-                                RoundedCornerShape(
-                                    topStart = 14.dp,
-                                    topEnd = 14.dp,
-                                    bottomStart = if (isUser) 14.dp else 4.dp,
-                                    bottomEnd = if (isUser) 4.dp else 14.dp,
-                                ),
-                        )
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = message.text,
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                )
             }
         }
     }

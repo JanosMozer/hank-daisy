@@ -169,7 +169,12 @@ class GlassesAudioManager(private val context: Context) {
      * Hank off within ~one sentence rather than waiting for the whole reply.
      */
     fun speak(text: String) {
-        val chunks = splitForTts(text)
+        // Hank now emits structured Markdown (step headers, callouts,
+        // tables). Narrating "hash hash step one colon" sounds terrible,
+        // so we flatten the Markdown down to readable prose first — the
+        // same replies still render as structured cards in the UI.
+        val spoken = HankMarkdown.toSpokenText(text)
+        val chunks = splitForTts(spoken.ifBlank { text })
         if (chunks.isEmpty()) return
         val a2dp = findA2dpDevice()
         Log.d(
