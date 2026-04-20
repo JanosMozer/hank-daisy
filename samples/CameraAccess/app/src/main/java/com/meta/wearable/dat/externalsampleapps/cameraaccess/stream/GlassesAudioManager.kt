@@ -52,6 +52,13 @@ class GlassesAudioManager(private val context: Context) {
 
     companion object {
         private const val TAG = "CameraAccess:GlassesAudio"
+
+        /**
+         * Flip to true once you have a paid ElevenLabs plan (free tier doesn't
+         * cover this app's per-call usage). When false, [speak] uses Android
+         * TTS directly — no per-sentence ElevenLabs round-trip and timeout.
+         */
+        private const val USE_ELEVENLABS = false
     }
 
     private var tts: TextToSpeech? = null
@@ -169,7 +176,7 @@ class GlassesAudioManager(private val context: Context) {
             TAG,
             "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"} (${chunks.size} chunks)",
         )
-        if (elevenLabs.isConfigured) {
+        if (USE_ELEVENLABS && elevenLabs.isConfigured) {
             val accepted =
                 elevenLabs.speak(chunks, onAllFailed = {
                     Log.w(TAG, "ElevenLabs produced no audio — falling back to Android TTS")
