@@ -93,98 +93,73 @@ fun StreamScreen(
       )
     }
 
-    // Gemini response overlay (scrollable for longer step-by-step responses)
-    streamUiState.lastGeminiResponse?.let { response ->
-      Box(
-          modifier = Modifier
-              .align(Alignment.TopCenter)
-              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
-              .background(
-                  Color.Black.copy(alpha = 0.8f),
-                  shape = RoundedCornerShape(16.dp),
-              )
-              .padding(16.dp)
-              .heightIn(max = 300.dp),
-      ) {
-        Column {
-          streamUiState.spokenQuestion?.let { question ->
-            Text(
-                text = "You asked: \"$question\"",
-                color = Color(0xFF38BDF8),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-          }
-          Text(
-              text = response,
-              color = Color.White,
-              fontSize = 13.sp,
-              lineHeight = 18.sp,
-              modifier = Modifier
-                  .fillMaxWidth()
-                  .verticalScroll(rememberScrollState()),
-          )
-        }
-      }
-    }
+    // ChatGPT-style scrollable conversation panel — replaces the old single
+    // Gemini-response overlay so the user sees the full back-and-forth.
+    ChatPanel(
+        messages = streamUiState.chatMessages,
+        modifier =
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(top = 48.dp, start = 12.dp, end = 12.dp)
+                .heightIn(max = 380.dp),
+    )
 
-    // Listening indicator
+    // Listening indicator (bottom-center, above the buttons so it doesn't
+    // collide with the chat panel at the top).
     if (streamUiState.isListening) {
       Box(
           modifier = Modifier
-              .align(Alignment.TopCenter)
-              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+              .align(Alignment.BottomCenter)
+              .padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
               .background(
-                  Color(0xFF1E40AF).copy(alpha = 0.9f),
-                  shape = RoundedCornerShape(16.dp),
+                  Color(0xFF1E40AF).copy(alpha = 0.92f),
+                  shape = RoundedCornerShape(20.dp),
               )
-              .padding(16.dp),
+              .padding(horizontal = 16.dp, vertical = 10.dp),
       ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
         ) {
           CircularProgressIndicator(
               color = Color(0xFF38BDF8),
-              modifier = Modifier.height(20.dp),
+              modifier = Modifier.height(18.dp),
           )
           Text(
-              text = "\uD83C\uDF99\uFE0F Listening... ask your question",
+              text = "\uD83C\uDF99\uFE0F Listening...",
               color = Color.White,
-              fontSize = 14.sp,
+              fontSize = 13.sp,
               fontWeight = FontWeight.SemiBold,
           )
         }
       }
     }
 
-    // Analyzing indicator
+    // Analyzing indicator (same bottom-center position).
     if (streamUiState.isAnalyzing) {
       Box(
           modifier = Modifier
-              .align(Alignment.TopCenter)
-              .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+              .align(Alignment.BottomCenter)
+              .padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
               .background(
-                  Color.Black.copy(alpha = 0.75f),
-                  shape = RoundedCornerShape(16.dp),
+                  Color.Black.copy(alpha = 0.85f),
+                  shape = RoundedCornerShape(20.dp),
               )
-              .padding(16.dp),
+              .padding(horizontal = 16.dp, vertical = 10.dp),
       ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
         ) {
           CircularProgressIndicator(
               color = Color.White,
-              modifier = Modifier.height(20.dp),
+              modifier = Modifier.height(18.dp),
           )
           Text(
-              text = "Hank is analyzing...",
+              text = "Hank is thinking...",
               color = Color.White,
-              fontSize = 14.sp,
+              fontSize = 13.sp,
               fontWeight = FontWeight.SemiBold,
           )
         }

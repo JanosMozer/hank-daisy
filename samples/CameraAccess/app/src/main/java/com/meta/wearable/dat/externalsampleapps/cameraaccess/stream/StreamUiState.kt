@@ -28,4 +28,13 @@ data class StreamUiState(
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
     val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,
+    val chatMessages: List<ChatMessage> = emptyList(),
 )
+
+data class ChatMessage(
+    val role: Role,
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis(),
+) {
+    enum class Role { USER, ASSISTANT }
+}

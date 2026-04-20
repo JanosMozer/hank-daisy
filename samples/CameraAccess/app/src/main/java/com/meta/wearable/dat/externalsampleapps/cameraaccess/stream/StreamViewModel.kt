@@ -241,11 +241,18 @@ class StreamViewModel(
     if (System.currentTimeMillis() - lastTurnAt < 4_000L) return
 
     val prompt =
-        "(System note: the user just moved the camera; the view has changed.) " +
-            "Look at this new frame. If something meaningful relative to our " +
-            "conversation is now visible — they completed a step, repositioned " +
-            "where you asked, or a new problem is visible — say ONE short " +
-            "sentence about it. If nothing meaningful changed, reply with just: <quiet>"
+        "(System note: the camera moved; here's the new view.) Consider the most " +
+            "recent step you gave in our conversation. " +
+            "1) If the user has VISIBLY completed that step, give them the NEXT " +
+            "single step now (one sentence, then stop). " +
+            "2) If they repositioned where you asked but the step isn't done " +
+            "yet, say one short sentence to acknowledge or guide them. " +
+            "3) If something concerning is visible (new problem, danger), say " +
+            "one short sentence about it. " +
+            "4) Otherwise — including if the previous step is not yet done — " +
+            "reply with just: <quiet>. Do NOT repeat or summarise. Do NOT " +
+            "advance to the next step unless you see evidence the previous " +
+            "one is done."
 
     autonomousJob?.cancel()
     autonomousJob =
@@ -275,6 +282,7 @@ class StreamViewModel(
             while (conversationHistory.size > 24) {
               conversationHistory.removeAt(0)
             }
+            appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
             _uiState.update { it.copy(lastGeminiResponse = response) }
             glassesAudio.speak(response)
             lastTurnAt = System.currentTimeMillis()
@@ -554,6 +562,14 @@ class StreamViewModel(
     voiceCommand.startManualListen()
   }
 
+  /** Append messages to the chat panel UI state, capped at 100 to stay light. */
+  private fun appendChatMessages(vararg msgs: ChatMessage) {
+    _uiState.update { state ->
+      val combined = (state.chatMessages + msgs).takeLast(100)
+      state.copy(chatMessages = combined)
+    }
+  }
+
   /** Quick analyze without voice — uses default prompt. */
   fun analyzeCurrentFrame() {
     analyzeWithQuestion("What do you see? Identify any problems and tell me how to fix them step by step.")
@@ -581,6 +597,10 @@ class StreamViewModel(
           while (conversationHistory.size > 24) {
             conversationHistory.removeAt(0)
           }
+          appendChatMessages(
+              ChatMessage(ChatMessage.Role.USER, question),
+              ChatMessage(ChatMessage.Role.ASSISTANT, response),
+          )
 
           _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
           glassesAudio.speak(response)
