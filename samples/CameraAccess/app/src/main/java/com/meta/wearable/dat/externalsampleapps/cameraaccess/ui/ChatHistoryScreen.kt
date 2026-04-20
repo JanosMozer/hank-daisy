@@ -21,12 +21,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,9 +48,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Full-screen chat view. Caller supplies the list of messages plus an
- * optional Export callback. Works for both the active stream's live chat
- * (observing StreamViewModel.uiState.chatMessages) and a saved past session.
+ * Full-screen chat view. Caller supplies the messages + optional callbacks.
+ * Export actions (JSON, Summary-PDF) now live in a bottom action bar so the
+ * top stays clean; the primary summary action is the accent-tinted one.
  */
 @Composable
 fun ChatHistoryScreen(
@@ -68,29 +74,28 @@ fun ChatHistoryScreen(
                 .statusBarsPadding()
                 .navigationBarsPadding(),
     ) {
+        // Top: back + title + turn count. No action buttons up here anymore.
         Row(
             modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier =
                     Modifier
-                        .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(8.dp))
+                        .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(10.dp))
                         .clickable(onClick = onBack)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
-                Text(
-                    text = "‹ Back",
-                    color = AppColors.TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = "Back",
+                    tint = AppColors.TextPrimary,
+                    modifier = Modifier.size(18.dp),
                 )
             }
             Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column {
                 Text(
                     text = title,
                     color = AppColors.TextPrimary,
@@ -103,63 +108,122 @@ fun ChatHistoryScreen(
                     fontSize = 11.sp,
                 )
             }
-            if (onSummariseAndExport != null && messages.isNotEmpty()) {
+        }
+
+        // Middle: scrollable messages.
+        Box(modifier = Modifier.weight(1f)) {
+            if (messages.isEmpty()) {
                 Box(
-                    modifier =
-                        Modifier
-                            .background(AppColors.Accent, shape = RoundedCornerShape(8.dp))
-                            .clickable(onClick = onSummariseAndExport)
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "\uD83D\uDCC4 Summary",
-                        color = AppColors.AccentOn,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "No turns yet.",
+                        color = AppColors.TextSecondary,
+                        fontSize = 13.sp,
                     )
                 }
-                Spacer(Modifier.width(6.dp))
-            }
-            if (onExport != null && messages.isNotEmpty()) {
-                Box(
-                    modifier =
-                        Modifier
-                            .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(8.dp))
-                            .clickable(onClick = onExport)
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 ) {
-                    Text(
-                        text = "↑ JSON",
-                        color = AppColors.TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    items(messages) { msg -> ChatRow(msg) }
+                    item { Spacer(Modifier.height(24.dp)) }
                 }
             }
         }
 
-        if (messages.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(32.dp),
-                contentAlignment = Alignment.Center,
+        // Bottom action bar. Only rendered if there's anything to export.
+        if (messages.isNotEmpty() && (onSummariseAndExport != null || onExport != null)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(AppColors.Surface)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                Text(
-                    text = "No turns yet.",
-                    color = AppColors.TextSecondary,
-                    fontSize = 13.sp,
+                Spacer(
+                    modifier =
+                        Modifier.fillMaxWidth().height(1.dp).background(AppColors.Border),
                 )
-            }
-        } else {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                items(messages) { msg -> ChatRow(msg) }
-                item { Spacer(Modifier.height(24.dp)) }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (onSummariseAndExport != null) {
+                        PrimaryActionButton(
+                            icon = Icons.Outlined.Description,
+                            label = "Summary PDF",
+                            onClick = onSummariseAndExport,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (onExport != null) {
+                        SecondaryActionButton(
+                            icon = Icons.Outlined.IosShare,
+                            label = "Export JSON",
+                            onClick = onExport,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun PrimaryActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .background(AppColors.Accent, shape = RoundedCornerShape(14.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = AppColors.AccentOn, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            color = AppColors.AccentOn,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun SecondaryActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(14.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = AppColors.TextPrimary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            color = AppColors.TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -170,22 +234,18 @@ private fun ChatRow(message: ChatMessage) {
     val fg = if (isUser) AppColors.UserBubbleText else AppColors.HankBubbleText
     val align = if (isUser) Alignment.End else Alignment.Start
     val label = if (isUser) "You" else "Hank"
-    val labelColor = AppColors.TextMuted
     val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(message.timestamp))
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = align,
-    ) {
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = align) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!isUser) {
-                Text(label, color = labelColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(label, color = AppColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.width(6.dp))
                 Text(ts, color = AppColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             } else {
                 Text(ts, color = AppColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                 Spacer(Modifier.width(6.dp))
-                Text(label, color = labelColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(label, color = AppColors.TextMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
         Spacer(Modifier.height(3.dp))
