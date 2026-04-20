@@ -6,22 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// CameraAccessScaffold - DAT Application Navigation Orchestrator
-//
-// This scaffold demonstrates a typical DAT application navigation pattern based on device
-// registration and streaming states from the DAT API.
-//
-// DAT State-Based Navigation:
-// - HomeScreen: When NOT registered (uiState.isRegistered = false) Shows initial registration UI
-//   calling Wearables.startRegistration()
-// - NonStreamScreen: When registered (uiState.isRegistered = true) but not streaming Shows device
-//   selection, permission checking, and pre-streaming setup
-// - StreamScreen: When actively streaming (uiState.isStreaming = true) Shows live video from
-//   StreamSession.videoStream and photo capture UI
-//
-// The scaffold also provides a debug menu (in DEBUG builds) that gives access to
-// MockDeviceKitScreen for testing DAT functionality without physical devices.
-
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
 import androidx.compose.foundation.layout.Box
@@ -53,17 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.ActiveJobScreen
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.ClosureReportPdf
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.JobQueueScreen
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.job.JobViewModel
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.session.SessionViewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,9 +55,8 @@ fun CameraAccessScaffold(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
   val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-  val jobViewModel: JobViewModel = viewModel()
-  val jobState by jobViewModel.uiState.collectAsStateWithLifecycle()
-  val activity = LocalActivity.current as? ComponentActivity
+  val sessionVm: SessionViewModel = viewModel()
+  val sessionState by sessionVm.uiState.collectAsStateWithLifecycle()
 
   // Observe recent errors and show snackbar
   LaunchedEffect(uiState.recentError) {
@@ -88,50 +66,50 @@ fun CameraAccessScaffold(
     }
   }
 
-  Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+  // When the user taps "+", trigger streaming via the existing WearablesVM
+  // flow. Once isStreaming flips on, scaffold below routes to StreamScreen.
+  LaunchedEffect(sessionState.streamRequested) {
+    if (sessionState.streamRequested && !uiState.isStreaming) {
+      viewModel.navigateToStreaming(onRequestWearablesPermission)
+      sessionVm.clearStreamRequest()
+    }
+  }
+
+  Surface(modifier = modifier.fillMaxSize(), color = AppColors.Background) {
     Box(modifier = Modifier.fillMaxSize()) {
       when {
+        !sessionState.splashShown ->
+            SplashScreen(onFinished = { sessionVm.markSplashDone() })
         uiState.isStreaming ->
             StreamScreen(
                 wearablesViewModel = viewModel,
+                onSessionEnd = { sessionVm.saveStreamSession(it) },
             )
-        uiState.isRegistered &&
-            jobState.activeJob != null &&
-            jobState.chatHistoryOpen ->
+        !uiState.isRegistered ->
+            HomeScreen(viewModel = viewModel)
+        sessionState.viewingSessionId != null -> {
+          val session =
+              sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
+          if (session != null) {
             ChatHistoryScreen(
-                wearablesViewModel = viewModel,
-                onBack = { jobViewModel.closeChatHistory() },
+                title = session.title,
+                messages = session.messages,
+                onBack = { sessionVm.closeSession() },
             )
-        uiState.isRegistered && jobState.activeJob != null ->
-            ActiveJobScreen(
-                state = jobState,
-                onBack = { jobViewModel.selectJob(null) },
-                onTechnicianNameChange = jobViewModel::setTechnicianName,
-                onBayNotesChange = jobViewModel::setBayNotes,
-                onStartStream = {
-                    viewModel.navigateToStreaming(onRequestWearablesPermission)
-                },
-                onOpenChatHistory = { jobViewModel.openChatHistory() },
-                onGenerateClosure = {
-                    val job = jobState.activeJob ?: return@ActiveJobScreen
-                    val app = activity?.applicationContext ?: return@ActiveJobScreen
-                    ClosureReportPdf.generateAndShare(
-                        context = app,
-                        job = job,
-                        technicianName = jobState.technicianName,
-                        bayNotes = jobState.bayNotes[job.id].orEmpty(),
-                        repairStartedAt = jobState.repairStartedAt[job.id],
-                    )
-                },
+          } else {
+            sessionVm.closeSession()
+            SessionsHomeScreen(
+                sessions = sessionState.sessions,
+                onOpenSession = { sessionVm.openSession(it) },
+                onNewSession = { sessionVm.requestNewSession() },
             )
-        uiState.isRegistered ->
-            JobQueueScreen(
-                state = jobState,
-                onSelectJob = { jobViewModel.selectJob(it) },
-            )
+          }
+        }
         else ->
-            HomeScreen(
-                viewModel = viewModel,
+            SessionsHomeScreen(
+                sessions = sessionState.sessions,
+                onOpenSession = { sessionVm.openSession(it) },
+                onNewSession = { sessionVm.requestNewSession() },
             )
       }
 

@@ -8,8 +8,6 @@
 
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,47 +30,31 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.StreamViewModel
-import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Full-screen chat history. Shows every turn on both sides — user and Hank —
- * with timestamps, role labels, and an Export button. Pulls its state from the
- * same (activity-scoped) StreamViewModel that feeds the in-stream overlay,
- * so the conversation persists across Stream/ActiveJob/ChatHistory navigation.
+ * Full-screen chat view. Caller supplies the list of messages plus an
+ * optional Export callback. Works for both the active stream's live chat
+ * (observing StreamViewModel.uiState.chatMessages) and a saved past session.
  */
 @Composable
 fun ChatHistoryScreen(
-    wearablesViewModel: WearablesViewModel,
+    title: String,
+    messages: List<ChatMessage>,
     onBack: () -> Unit,
+    onExport: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val streamViewModel: StreamViewModel =
-        viewModel(
-            factory =
-                StreamViewModel.Factory(
-                    application = (LocalActivity.current as ComponentActivity).application,
-                    wearablesViewModel = wearablesViewModel,
-                ),
-        )
-    val uiState by streamViewModel.uiState.collectAsStateWithLifecycle()
-    val messages = uiState.chatMessages
     val listState = rememberLazyListState()
-
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
     }
@@ -81,7 +63,7 @@ fun ChatHistoryScreen(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(Color(0xFF0B0B0D))
+                .background(AppColors.Background)
                 .statusBarsPadding()
                 .navigationBarsPadding(),
     ) {
@@ -95,13 +77,13 @@ fun ChatHistoryScreen(
             Box(
                 modifier =
                     Modifier
-                        .background(Color(0xFF1F2937), shape = RoundedCornerShape(8.dp))
+                        .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(8.dp))
                         .clickable(onClick = onBack)
                         .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Text(
                     text = "‹ Back",
-                    color = Color.White,
+                    color = AppColors.TextPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -109,28 +91,28 @@ fun ChatHistoryScreen(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Conversation",
-                    color = Color.White,
+                    text = title,
+                    color = AppColors.TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
                     text = "${messages.size} turns",
-                    color = Color(0xFF9CA3AF),
+                    color = AppColors.TextSecondary,
                     fontSize = 11.sp,
                 )
             }
-            if (messages.isNotEmpty()) {
+            if (onExport != null && messages.isNotEmpty()) {
                 Box(
                     modifier =
                         Modifier
-                            .background(Color(0xFF374151), shape = RoundedCornerShape(8.dp))
-                            .clickable { streamViewModel.exportSession() }
+                            .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(8.dp))
+                            .clickable(onClick = onExport)
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
                     Text(
                         text = "↑ Export",
-                        color = Color.White,
+                        color = AppColors.TextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -144,10 +126,8 @@ fun ChatHistoryScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text =
-                        "No conversation yet. Start the live stream from the job " +
-                            "screen and say anything — every turn gets logged here.",
-                    color = Color(0xFF9CA3AF),
+                    text = "No turns yet.",
+                    color = AppColors.TextSecondary,
                     fontSize = 13.sp,
                 )
             }
@@ -168,10 +148,11 @@ fun ChatHistoryScreen(
 @Composable
 private fun ChatRow(message: ChatMessage) {
     val isUser = message.role == ChatMessage.Role.USER
-    val bg = if (isUser) Color(0xFF2563EB) else Color(0xFF1F2937)
+    val bg = if (isUser) AppColors.UserBubble else AppColors.HankBubble
+    val fg = if (isUser) AppColors.UserBubbleText else AppColors.HankBubbleText
     val align = if (isUser) Alignment.End else Alignment.Start
     val label = if (isUser) "You" else "Hank"
-    val labelColor = if (isUser) Color(0xFFBFDBFE) else Color(0xFF9CA3AF)
+    val labelColor = AppColors.TextMuted
     val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(message.timestamp))
 
     Column(
@@ -180,33 +161,13 @@ private fun ChatRow(message: ChatMessage) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (!isUser) {
-                Text(
-                    text = label,
-                    color = labelColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Text(label, color = labelColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    text = ts,
-                    color = Color(0xFF4B5563),
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
+                Text(ts, color = AppColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             } else {
-                Text(
-                    text = ts,
-                    color = Color(0xFF4B5563),
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
+                Text(ts, color = AppColors.TextMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    text = label,
-                    color = labelColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Text(label, color = labelColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
         Spacer(Modifier.height(3.dp))
@@ -226,13 +187,7 @@ private fun ChatRow(message: ChatMessage) {
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Text(
-                text = message.text,
-                color = Color.White,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
+            Text(text = message.text, color = fg, fontSize = 14.sp, lineHeight = 20.sp)
         }
     }
 }
-

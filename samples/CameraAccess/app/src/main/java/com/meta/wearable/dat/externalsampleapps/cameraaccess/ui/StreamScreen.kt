@@ -58,6 +58,7 @@ import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.Wearables
 fun StreamScreen(
     wearablesViewModel: WearablesViewModel,
     modifier: Modifier = Modifier,
+    onSessionEnd: (List<com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage>) -> Unit = {},
     streamViewModel: StreamViewModel =
         viewModel(
             factory =
@@ -71,7 +72,13 @@ fun StreamScreen(
 
   DisposableEffect(Unit) {
     streamViewModel.startStream()
-    onDispose { streamViewModel.stopStream() }
+    onDispose {
+      // Capture the conversation BEFORE stopStream() wipes it, so we can
+      // save it as a Session on the home screen.
+      val snapshot = streamViewModel.uiState.value.chatMessages
+      if (snapshot.isNotEmpty()) onSessionEnd(snapshot)
+      streamViewModel.stopStream()
+    }
   }
 
   Box(modifier = modifier.fillMaxSize()) {
