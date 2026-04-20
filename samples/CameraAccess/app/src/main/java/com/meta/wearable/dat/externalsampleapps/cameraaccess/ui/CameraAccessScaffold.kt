@@ -10,6 +10,7 @@ package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -86,13 +89,39 @@ fun CameraAccessScaffold(
     }
   }
 
-  val palette =
+  val systemDark = isSystemInDarkTheme()
+  val basePalette =
       when (sessionState.settings.themeMode) {
         ThemeMode.DARK -> DarkPalette
-        else -> LightPalette // SYSTEM falls back to LIGHT for now
+        ThemeMode.LIGHT -> LightPalette
+        ThemeMode.SYSTEM -> if (systemDark) DarkPalette else LightPalette
       }
+  // High-contrast tweaks: collapse the secondary/muted greys toward the
+  // primary text colour and darken the border so dividers + caption text
+  // stand out for users who need the extra contrast.
+  val palette =
+      if (sessionState.settings.highContrast) {
+        basePalette.copy(
+            TextSecondary = basePalette.TextPrimary,
+            TextMuted = basePalette.TextPrimary.copy(alpha = 0.75f),
+            Border = basePalette.TextPrimary.copy(alpha = 0.45f),
+        )
+      } else {
+        basePalette
+      }
+  // Text-scale: rebuild Density with a multiplied fontScale so EVERY .sp
+  // text in the tree resizes uniformly without touching individual screens.
+  val baseDensity = LocalDensity.current
+  val scaledDensity =
+      Density(
+          density = baseDensity.density,
+          fontScale = baseDensity.fontScale * sessionState.settings.textScale.factor,
+      )
 
-  CompositionLocalProvider(LocalAppPalette provides palette) {
+  CompositionLocalProvider(
+      LocalAppPalette provides palette,
+      LocalDensity provides scaledDensity,
+  ) {
     Surface(modifier = modifier.fillMaxSize(), color = AppColors.Background) {
       Box(modifier = Modifier.fillMaxSize()) {
         when {

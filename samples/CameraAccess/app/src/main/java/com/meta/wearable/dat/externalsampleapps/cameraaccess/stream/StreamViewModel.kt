@@ -122,10 +122,25 @@ class StreamViewModel(
       )
 
   /** Tiny vibration so the user knows we heard them and can speak now —
-   * masks the ~200ms gap before the recognizer is actually capturing. */
+   * masks the ~200ms gap before the recognizer is actually capturing.
+   * Respects the "Haptic feedback" toggle in Settings. */
   private fun hapticInterruptCue() {
     try {
       val app = getApplication<Application>()
+      // Read the user's haptic-feedback preference from the same shared
+      // prefs SessionViewModel persists settings into. Default ON for
+      // backwards compatibility.
+      val hapticEnabled =
+          try {
+            val raw =
+                app.getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
+                    .getString("settings_json", null)
+            if (raw == null) true
+            else org.json.JSONObject(raw).optBoolean("hapticFeedback", true)
+          } catch (_: Exception) {
+            true
+          }
+      if (!hapticEnabled) return
       val vibrator =
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             (app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
