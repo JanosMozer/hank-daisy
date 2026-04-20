@@ -105,66 +105,17 @@ fun StreamScreen(
                 .heightIn(max = 380.dp),
     )
 
-    // Listening indicator (bottom-center, above the buttons so it doesn't
-    // collide with the chat panel at the top).
-    if (streamUiState.isListening) {
-      Box(
-          modifier = Modifier
-              .align(Alignment.BottomCenter)
-              .padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
-              .background(
-                  Color(0xFF1E40AF).copy(alpha = 0.92f),
-                  shape = RoundedCornerShape(20.dp),
-              )
-              .padding(horizontal = 16.dp, vertical = 10.dp),
-      ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-          CircularProgressIndicator(
-              color = Color(0xFF38BDF8),
-              modifier = Modifier.height(18.dp),
-          )
-          Text(
-              text = "\uD83C\uDF99\uFE0F Listening...",
-              color = Color.White,
-              fontSize = 13.sp,
-              fontWeight = FontWeight.SemiBold,
-          )
-        }
-      }
-    }
-
-    // Analyzing indicator (same bottom-center position).
-    if (streamUiState.isAnalyzing) {
-      Box(
-          modifier = Modifier
-              .align(Alignment.BottomCenter)
-              .padding(bottom = 140.dp, start = 16.dp, end = 16.dp)
-              .background(
-                  Color.Black.copy(alpha = 0.85f),
-                  shape = RoundedCornerShape(20.dp),
-              )
-              .padding(horizontal = 16.dp, vertical = 10.dp),
-      ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-          CircularProgressIndicator(
-              color = Color.White,
-              modifier = Modifier.height(18.dp),
-          )
-          Text(
-              text = "Hank is thinking...",
-              color = Color.White,
-              fontSize = 13.sp,
-              fontWeight = FontWeight.SemiBold,
-          )
-        }
-      }
-    }
+    // Unified status pill — single cross-fading indicator so the
+    // Listening → Thinking → Speaking → Ready transitions don't flicker.
+    StatusPill(
+        isListening = streamUiState.isListening,
+        isAnalyzing = streamUiState.isAnalyzing,
+        isSpeaking = streamUiState.isHankSpeaking,
+        modifier =
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 140.dp),
+    )
 
     // Glasses audio routing banner — warns the mechanic if the glasses
     // aren't paired as a Bluetooth headset (so I/O falls back to the phone).
@@ -190,26 +141,9 @@ fun StreamScreen(
       }
     }
 
-    // Always-on wake word indicator (subtle, bottom-right)
-    if (streamUiState.isWakeWordActive && !streamUiState.isListening && !streamUiState.isAnalyzing && streamUiState.lastGeminiResponse == null) {
-      Box(
-          modifier = Modifier
-              .align(Alignment.TopEnd)
-              .padding(top = 48.dp, end = 16.dp)
-              .background(
-                  Color(0xFF065F46).copy(alpha = 0.85f),
-                  shape = RoundedCornerShape(12.dp),
-              )
-              .padding(horizontal = 12.dp, vertical = 8.dp),
-      ) {
-        Text(
-            text = "\uD83D\uDFE2 Hank is listening",
-            color = Color(0xFF34D399),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-      }
-    }
+    // (The old top-right wake-word indicator has been absorbed into the
+    // unified StatusPill above, since always-on listening and "Ready" state
+    // are now communicated there.)
 
     Box(modifier = Modifier.fillMaxSize().padding(all = 24.dp)) {
       Row(

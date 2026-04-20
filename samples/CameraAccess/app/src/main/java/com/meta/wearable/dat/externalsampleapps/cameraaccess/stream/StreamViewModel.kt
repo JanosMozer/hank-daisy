@@ -336,6 +336,7 @@ class StreamViewModel(
     speakingJob =
         viewModelScope.launch {
           glassesAudio.isSpeaking.collect { speaking ->
+            _uiState.update { it.copy(isHankSpeaking = speaking) }
             // Mute the recognizer (it can't echo-cancel Hank's own voice) and
             // hand the mic to BargeInDetector, which CAN (via AEC).
             voiceCommand.setMuted(speaking)
