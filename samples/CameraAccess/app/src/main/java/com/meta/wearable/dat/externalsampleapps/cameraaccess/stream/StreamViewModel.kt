@@ -466,6 +466,7 @@ class StreamViewModel(
     sessionStateJob = null
     try { presentationQueue?.stop() } catch (_: Exception) {}
     presentationQueue = null
+    clearDraftChat()
     _uiState.update { INITIAL_STATE }
     try { stream?.stop() } catch (e: Exception) { Log.w(TAG, "stream?.stop() in stopStream", e) }
     stream = null
@@ -586,12 +587,51 @@ class StreamViewModel(
     voiceCommand.startManualListen()
   }
 
-  /** Append messages to the chat panel UI state, capped at 100 to stay light. */
+  /** Append messages to the chat panel UI state, capped at 100 to stay light.
+   * Also drafts the running conversation to SharedPreferences so a crash /
+   * kill / OOM mid-stream doesn't lose the chat — SessionViewModel picks it
+   * up on next launch and surfaces it as a recovered session. */
   private fun appendChatMessages(vararg msgs: ChatMessage) {
     _uiState.update { state ->
       val combined = (state.chatMessages + msgs).takeLast(100)
       state.copy(chatMessages = combined)
     }
+    persistDraftChat()
+  }
+
+  private fun persistDraftChat() {
+    try {
+      val prefs =
+          getApplication<Application>()
+              .getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
+      val msgs = _uiState.value.chatMessages
+      if (msgs.isEmpty()) {
+        prefs.edit().remove("draft_chat").apply()
+        return
+      }
+      val arr = org.json.JSONArray()
+      for (m in msgs) {
+        arr.put(
+            org.json.JSONObject()
+                .put("role", if (m.role == ChatMessage.Role.USER) "user" else "assistant")
+                .put("text", m.text)
+                .put("ts", m.timestamp),
+        )
+      }
+      prefs.edit().putString("draft_chat", arr.toString()).apply()
+    } catch (e: Exception) {
+      Log.w(TAG, "persistDraftChat failed", e)
+    }
+  }
+
+  private fun clearDraftChat() {
+    try {
+      getApplication<Application>()
+          .getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
+          .edit()
+          .remove("draft_chat")
+          .apply()
+    } catch (_: Exception) {}
   }
 
   /** Quick analyze without voice — uses default prompt. */

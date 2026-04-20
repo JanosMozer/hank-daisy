@@ -44,11 +44,47 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     private val _uiState =
         MutableStateFlow(
             SessionsUiState(
-                sessions = loadSessions(),
+                sessions = recoverDraftIntoSessions(loadSessions()),
                 userProfile = loadProfile(),
             ),
         )
     val uiState: StateFlow<SessionsUiState> = _uiState.asStateFlow()
+
+    /** If the app was killed mid-stream, a JSON draft of the running chat
+     * is sitting in prefs. Recover it as a saved session so the user doesn't
+     * lose the conversation, then clear the draft so we don't duplicate on
+     * the next cold start. */
+    private fun recoverDraftIntoSessions(existing: List<Session>): List<Session> {
+        val raw = prefs.getString("draft_chat", null) ?: return existing
+        return try {
+            val arr = JSONArray(raw)
+            if (arr.length() == 0) {
+                prefs.edit().remove("draft_chat").apply()
+                return existing
+            }
+            val msgs =
+                (0 until arr.length()).map {
+                    val mo = arr.getJSONObject(it)
+                    ChatMessage(
+                        role =
+                            if (mo.optString("role") == "user") ChatMessage.Role.USER
+                            else ChatMessage.Role.ASSISTANT,
+                        text = mo.optString("text"),
+                        timestamp = mo.optLong("ts", System.currentTimeMillis()),
+                    )
+                }
+            val base = Session.from(msgs)
+            val recovered = base.copy(title = "(recovered) ${base.title}")
+            prefs.edit().remove("draft_chat").apply()
+            val merged = listOf(recovered) + existing
+            persistSessions(merged)
+            merged
+        } catch (e: Exception) {
+            Log.w(TAG, "recoverDraftIntoSessions failed", e)
+            prefs.edit().remove("draft_chat").apply()
+            existing
+        }
+    }
 
     fun markSplashDone() = _uiState.update { it.copy(splashShown = true) }
 
@@ -71,6 +107,8 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         val session = Session.from(messages)
         _uiState.update { state -> state.copy(sessions = listOf(session) + state.sessions) }
         persistSessions(_uiState.value.sessions)
+        // Clear the in-flight draft now that the session is saved cleanly.
+        prefs.edit().remove("draft_chat").apply()
     }
 
     fun deleteSession(id: String) {
