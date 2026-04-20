@@ -141,7 +141,12 @@ class GlassesAudioManager(private val context: Context) {
         _isSpeaking.value = false
     }
 
-    /** Speak the reply through the glasses (A2DP) if connected, else through the phone. */
+    /**
+     * Speak the reply through the glasses (A2DP) if connected, else through the
+     * phone. Splits long text into sentence-sized chunks queued individually so
+     * stopSpeaking() can cut Hank off within one chunk's audio buffer (~one
+     * sentence) rather than waiting for the whole reply to finish.
+     */
     fun speak(text: String) {
         if (!ttsReady) {
             Log.w(TAG, "TTS not ready")
@@ -156,8 +161,23 @@ class GlassesAudioManager(private val context: Context) {
                     .build(),
             )
         }
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "hank_${System.currentTimeMillis()}")
-        Log.d(TAG, "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"}")
+        val chunks = splitForTts(text)
+        if (chunks.isEmpty()) return
+        tts?.speak(chunks.first(), TextToSpeech.QUEUE_FLUSH, null, "hank_${System.currentTimeMillis()}_0")
+        for ((i, chunk) in chunks.withIndex().drop(1)) {
+            tts?.speak(chunk, TextToSpeech.QUEUE_ADD, null, "hank_${System.currentTimeMillis()}_$i")
+        }
+        Log.d(TAG, "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"} (${chunks.size} chunks)")
+    }
+
+    /** Split a reply on sentence boundaries so each chunk is short enough that
+     * stop() can cancel the remainder responsively. */
+    private fun splitForTts(text: String): List<String> {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        // Split on . ! ? followed by space or end, keeping the punctuation.
+        val regex = Regex("(?<=[.!?])\\s+")
+        return trimmed.split(regex).map { it.trim() }.filter { it.isNotEmpty() }
     }
 
     /**

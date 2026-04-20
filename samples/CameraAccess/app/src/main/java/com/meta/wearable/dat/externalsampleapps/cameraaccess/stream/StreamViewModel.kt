@@ -204,7 +204,14 @@ class StreamViewModel(
             // hand the mic to BargeInDetector, which CAN (via AEC).
             voiceCommand.setMuted(speaking)
             if (speaking) {
-              bargeInDetector.start()
+              // Give SpeechRecognizer's destroy() a moment to actually release
+              // the mic before BargeInDetector tries to grab it. Without this
+              // delay, the AudioRecord opens but read() returns silence for
+              // the first ~200ms because the mic is still held.
+              kotlinx.coroutines.delay(250)
+              if (glassesAudio.isSpeaking.value) {
+                bargeInDetector.start()
+              }
             } else {
               bargeInDetector.stop()
               // After Hank finishes speaking naturally, auto-listen for a

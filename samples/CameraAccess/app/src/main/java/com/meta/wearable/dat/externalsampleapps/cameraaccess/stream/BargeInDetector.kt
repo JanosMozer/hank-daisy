@@ -30,8 +30,8 @@ import kotlin.math.sqrt
  */
 class BargeInDetector(
     private val onUserSpeaking: () -> Unit,
-    private val rmsThreshold: Double = 2000.0,
-    private val triggerMs: Long = 500L,
+    private val rmsThreshold: Double = 900.0,
+    private val triggerMs: Long = 200L,
 ) {
     companion object {
         private const val TAG = "CameraAccess:BargeIn"
@@ -111,6 +111,7 @@ class BargeInDetector(
         val buffer = ShortArray(1024)
         val sampleMs = (1000L * buffer.size) / SAMPLE_RATE  // ~64ms per buffer
         var aboveMs = 0L
+        var loggedAt = 0L
         try {
             while (running) {
                 val read = recorder?.read(buffer, 0, buffer.size) ?: -1
@@ -119,10 +120,16 @@ class BargeInDetector(
                     continue
                 }
                 val rms = computeRms(buffer, read)
+                // Log every ~500ms so we can see what the threshold should actually be.
+                val now = System.currentTimeMillis()
+                if (now - loggedAt > 500) {
+                    Log.d(TAG, "rms=${rms.toInt()} (threshold=${rmsThreshold.toInt()}, aboveMs=$aboveMs)")
+                    loggedAt = now
+                }
                 if (rms > rmsThreshold) {
                     aboveMs += sampleMs
                     if (aboveMs >= triggerMs) {
-                        Log.d(TAG, "Voice detected (rms=$rms) — firing barge-in")
+                        Log.d(TAG, "Voice detected (rms=${rms.toInt()}) — firing barge-in")
                         running = false
                         try {
                             onUserSpeaking()
