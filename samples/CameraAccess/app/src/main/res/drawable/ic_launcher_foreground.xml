@@ -2,18 +2,12 @@
 <!--
     Hank & Daisy launcher-icon foreground.
 
-    Vertical wordmark: "HANK" / "&" / "DAISY" in purple on white.
-    VectorDrawable has no text support, so each glyph is constructed as
-    a 4×5 (H/A/N/K/D/S/Y) or 2×5 (I) pixel grid, scaled 2× into the
-    108×108 adaptive-icon viewport. Rough at very small sizes but the
-    wordmark is still recognisable, and this is what the user asked for
-    ("yes the text might be smaller but it should be fine").
-
-    Grid: each "pixel" is 2×2 units, scale 2.
-    Line Y-spans:
-      HANK : y 22..32
-      &    : y 40..50
-      DAISY: y 58..68
+    Vertical wordmark "HANK / & / DAISY" in purple on white. Rendered as
+    stroke paths with rounded caps + joins so the letters read smooth at
+    launcher-icon scale (no pixel staircasing). VectorDrawable has no text
+    rendering so each glyph is a hand-built stroke path; simple enough to
+    stay legible, smooth enough to avoid the blocky look of filled-rect
+    letters.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -22,28 +16,23 @@
     android:viewportHeight="108">
 
     <path
-        android:fillColor="#7C3AED"
+        android:fillColor="#00000000"
+        android:strokeColor="#7C3AED"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
         android:pathData="
-            M35,22 h2 v10 h-2 Z  M41,22 h2 v10 h-2 Z  M35,26 h8 v2 h-8 Z
-            M47,22 h4 v2 h-4 Z   M45,24 h2 v2 h-2 Z   M51,24 h2 v2 h-2 Z
-            M45,26 h8 v2 h-8 Z   M45,28 h2 v4 h-2 Z   M51,28 h2 v4 h-2 Z
-            M55,22 h2 v10 h-2 Z  M61,22 h2 v10 h-2 Z
-            M57,24 h2 v2 h-2 Z   M59,26 h2 v2 h-2 Z
-            M65,22 h2 v10 h-2 Z  M71,22 h2 v2 h-2 Z
-            M69,24 h2 v2 h-2 Z   M67,26 h2 v2 h-2 Z
-            M69,28 h2 v2 h-2 Z   M71,30 h2 v2 h-2 Z
+            M37,22 L37,30   M44,22 L44,30   M37,26 L44,26
+            M46,30 L49.5,22 L53,30   M47.5,27 L51.5,27
+            M55,30 L55,22 L62,30 L62,22
+            M64,22 L64,30   M64,26 L71,22   M64,26 L71,30
 
-            M52,40 h4 v2 h-4 Z   M50,42 h2 v2 h-2 Z   M54,42 h2 v2 h-2 Z
-            M52,44 h2 v2 h-2 Z   M50,46 h2 v2 h-2 Z   M54,46 h2 v2 h-2 Z
-            M52,48 h4 v2 h-4 Z
+            M56,41 C52.5,40 51,43 53.5,44 C56.5,45 56.5,47 54,47.5 C51,48 50.5,45.5 52,44
 
-            M33,58 h6 v2 h-6 Z   M33,66 h6 v2 h-6 Z
-            M33,60 h2 v6 h-2 Z   M39,60 h2 v6 h-2 Z
-            M45,58 h4 v2 h-4 Z   M43,60 h2 v2 h-2 Z   M49,60 h2 v2 h-2 Z
-            M43,62 h8 v2 h-8 Z   M43,64 h2 v4 h-2 Z   M49,64 h2 v4 h-2 Z
-            M53,58 h2 v10 h-2 Z
-            M59,58 h6 v2 h-6 Z   M57,60 h2 v2 h-2 Z   M59,62 h4 v2 h-4 Z
-            M63,64 h2 v2 h-2 Z   M57,66 h6 v2 h-6 Z
-            M67,58 h2 v4 h-2 Z   M73,58 h2 v4 h-2 Z   M69,62 h4 v6 h-4 Z
+            M35,58 L35,66   M35,58 C42,58 42,66 35,66
+            M44,66 L47.5,58 L51,66   M45.5,63 L49.5,63
+            M54.5,58 L54.5,66
+            M64,59 C61,58 58,59 58,61 C58,63 64,62 64,64 C64,66 60,66 58,65
+            M67,58 L70.5,62 L74,58   M70.5,62 L70.5,66
         " />
 </vector>

@@ -225,9 +225,6 @@ private fun MainTabs(
                   sessionVm.updateSettings(state.settings.copy(hapticFeedback = it))
                 },
             )
-        AppTab.PROFILE -> {
-          LaunchedEffect(Unit) { onOpenProfile() }
-        }
       }
     }
     BottomNav(current = state.currentTab, onSelect = { sessionVm.selectTab(it) })

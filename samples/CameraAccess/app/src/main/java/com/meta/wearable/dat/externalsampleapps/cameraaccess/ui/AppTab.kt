@@ -8,9 +8,20 @@
 
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
-enum class AppTab(val label: String, val emoji: String) {
-    CHATS("Chats", "\uD83D\uDCAC"),
-    TIPS("Tips", "\uD83D\uDCA1"),
-    SETTINGS("Settings", "\u2699\uFE0F"),
-    PROFILE("You", "\uD83D\uDC64"),
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
+
+/**
+ * Bottom-nav destinations. Profile is intentionally NOT a tab — it's a
+ * modal opened from the avatar on the Chats home. Making it a tab created
+ * a loop where the LaunchedEffect re-opened the profile every time the
+ * back button closed it.
+ */
+enum class AppTab(val label: String, val icon: ImageVector) {
+    CHATS("Chats", Icons.Outlined.Forum),
+    TIPS("Tips", Icons.Outlined.Lightbulb),
+    SETTINGS("Settings", Icons.Outlined.Settings),
 }
