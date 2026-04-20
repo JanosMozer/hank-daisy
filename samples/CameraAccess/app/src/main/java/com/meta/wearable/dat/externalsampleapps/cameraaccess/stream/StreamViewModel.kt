@@ -358,11 +358,15 @@ class StreamViewModel(
               }
             } else {
               bargeInDetector.stop()
-              // After Hank finishes speaking naturally, auto-listen for a
-              // follow-up turn so the conversation flows without needing
-              // "Hey Hank" again.
+              // After Hank finishes speaking (naturally OR via barge-in),
+              // always resume listening. Mid-conversation we use follow-up
+              // mode for snappier turn-taking; if somehow we're not in a
+              // conversation, fall back to general continuous listening so
+              // the app never silently "stops hearing" the user.
               if (conversationHistory.isNotEmpty()) {
                 voiceCommand.startConversationFollowUp()
+              } else {
+                voiceCommand.startContinuousListening()
               }
             }
           }

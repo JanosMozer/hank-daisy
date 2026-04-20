@@ -33,6 +33,10 @@ class VoiceCommandManager(private val context: Context) {
     companion object {
         private const val TAG = "CameraAccess:VoiceCmd"
         private const val RESTART_DELAY_MS = 500L
+        private const val WATCHDOG_INTERVAL_MS = 10_000L
+        /** If no recognizer callback for this long while we think we're
+         * listening, the recognizer is presumed dead and force-recreated. */
+        private const val MAX_SILENCE_MS = 25_000L
 
         // Wake word variations (lowercase for matching)
         private val WAKE_WORDS = listOf("hey hank", "hank", "hey hunk", "a hank", "hey frank")
@@ -59,6 +63,28 @@ class VoiceCommandManager(private val context: Context) {
     private var isRunning = false
     private var isFollowUp = false  // true when we detected wake word, now waiting for question
     private var isMuted = false     // pause listening while Hank himself is talking
+    @Volatile private var lastCallbackAt: Long = 0L
+
+    /** Periodically verify the recognizer is actually alive. Google's
+     * SpeechRecognizer is known to silently die after long runs or certain
+     * error sequences; without this the app would "just stop listening" with
+     * no sign why. */
+    private val watchdog =
+        object : Runnable {
+            override fun run() {
+                if (!isRunning) return
+                if (!isMuted) {
+                    val silent = System.currentTimeMillis() - lastCallbackAt
+                    if (silent > MAX_SILENCE_MS) {
+                        Log.w(TAG, "Watchdog: no callbacks for ${silent}ms — recreating recognizer")
+                        lastCallbackAt = System.currentTimeMillis()
+                        destroyRecognizer()
+                        handler.postDelayed({ startRecognizer() }, 200)
+                    }
+                }
+                handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+            }
+        }
 
     /**
      * Start always-on passive listening for "Hey Hank".
@@ -73,6 +99,9 @@ class VoiceCommandManager(private val context: Context) {
 
         isRunning = true
         isFollowUp = false
+        isMuted = false
+        lastCallbackAt = System.currentTimeMillis()
+        handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
         startRecognizer()
     }
 
@@ -88,6 +117,14 @@ class VoiceCommandManager(private val context: Context) {
     /** Manually trigger question listening (same as tapping "Ask Hank"). */
     fun startManualListen() {
         if (_state.value is VoiceState.Listening) return
+        // Safety: if the recognizer loop had somehow stopped, resurrect it.
+        if (!isRunning) {
+            isRunning = true
+            lastCallbackAt = System.currentTimeMillis()
+            handler.removeCallbacks(watchdog)
+            handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
+        }
+        isMuted = false
         isFollowUp = true
         _state.value = VoiceState.Listening
         restartRecognizer()
@@ -98,9 +135,12 @@ class VoiceCommandManager(private val context: Context) {
      * requiring "Hey Hank" again. Lets the conversation flow naturally.
      */
     fun startConversationFollowUp() {
-        if (!isRunning && !isFollowUp) {
-            // we were stopped entirely — nothing to do
-            return
+        // Safety: if the recognizer loop had somehow stopped, resurrect it.
+        if (!isRunning) {
+            isRunning = true
+            lastCallbackAt = System.currentTimeMillis()
+            handler.removeCallbacks(watchdog)
+            handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS)
         }
         isMuted = false
         isFollowUp = true
@@ -179,15 +219,17 @@ class VoiceCommandManager(private val context: Context) {
 
     private fun createListener() = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
+            lastCallbackAt = System.currentTimeMillis()
             Log.d(TAG, "Ready (mode=${if (isFollowUp) "follow-up" else "passive"})")
         }
 
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
+        override fun onBeginningOfSpeech() { lastCallbackAt = System.currentTimeMillis() }
+        override fun onRmsChanged(rmsdB: Float) { lastCallbackAt = System.currentTimeMillis() }
+        override fun onBufferReceived(buffer: ByteArray?) { lastCallbackAt = System.currentTimeMillis() }
+        override fun onEndOfSpeech() { lastCallbackAt = System.currentTimeMillis() }
 
         override fun onError(error: Int) {
+            lastCallbackAt = System.currentTimeMillis()
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
@@ -210,11 +252,13 @@ class VoiceCommandManager(private val context: Context) {
         }
 
         override fun onResults(results: Bundle?) {
+            lastCallbackAt = System.currentTimeMillis()
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             handleSpeechResults(matches)
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
+            lastCallbackAt = System.currentTimeMillis()
             // Check partials for wake word to respond faster
             if (!isFollowUp) {
                 val partials = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -226,7 +270,9 @@ class VoiceCommandManager(private val context: Context) {
             }
         }
 
-        override fun onEvent(eventType: Int, params: Bundle?) {}
+        override fun onEvent(eventType: Int, params: Bundle?) {
+            lastCallbackAt = System.currentTimeMillis()
+        }
     }
 
     private fun handleSpeechResults(matches: List<String>?) {
