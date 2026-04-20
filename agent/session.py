@@ -7,14 +7,16 @@ diagnosis as new visual evidence arrives.
 """
 
 import os
+from typing import AsyncGenerator
 
 import httpx
 
-from agent.client import DEFAULT_MODEL, OPENROUTER_API_URL
+from agent.client import DEFAULT_MODEL, OPENROUTER_API_URL, stream_completion
 from agent.prompts import (
     INITIAL_USER_PROMPT,
     UPDATE_USER_PROMPT,
     build_system_prompt,
+    build_conversation_prompt,
 )
 
 
@@ -80,3 +82,62 @@ class DiagnosticSession:
             if m["role"] == "assistant":
                 return m["content"]
         return None
+
+
+class ConversationSession:
+    """
+    Real-time conversation session for voice Q&A with Hank.
+    Supports text-only queries or text + optional image.
+    Streams responses for low-latency TTS on glasses.
+    """
+
+    def __init__(self, model: str = DEFAULT_MODEL, api_key: str | None = None):
+        self.model = model
+        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        if not self._api_key:
+            raise ValueError("OPENROUTER_API_KEY is not set.")
+        self._system_prompt = build_conversation_prompt()
+        self._messages: list[dict] = []
+
+    async def query(
+        self,
+        text: str,
+        b64_frame: str | None = None,
+        media_type: str = "image/jpeg",
+    ) -> AsyncGenerator[str, None]:
+        """
+        Process a text query with optional image frame.
+        Streams response chunks for real-time TTS.
+        Maintains conversation history (trimmed to last 20 turns).
+        """
+        # Build user message
+        if b64_frame:
+            user_content = [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{b64_frame}"},
+                },
+                {"type": "text", "text": text},
+            ]
+        else:
+            user_content = text
+
+        self._messages.append({"role": "user", "content": user_content})
+
+        # Stream response
+        full_response = ""
+        async for chunk in stream_completion(
+            self._messages,
+            self._system_prompt,
+            self.model,
+            self._api_key,
+        ):
+            full_response += chunk
+            yield chunk
+
+        # Store response in history
+        self._messages.append({"role": "assistant", "content": full_response})
+
+        # Trim history to last 20 turns (40 messages)
+        if len(self._messages) > 40:
+            self._messages = self._messages[-40:]

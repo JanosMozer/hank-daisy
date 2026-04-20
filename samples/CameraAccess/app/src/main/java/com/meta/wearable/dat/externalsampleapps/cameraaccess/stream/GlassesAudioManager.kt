@@ -168,7 +168,7 @@ class GlassesAudioManager(private val context: Context) {
      * Splits long text into sentence-sized chunks so stopSpeaking() can cut
      * Hank off within ~one sentence rather than waiting for the whole reply.
      */
-    fun speak(text: String) {
+    fun speak(text: String, useQueueAdd: Boolean = false) {
         val chunks = splitForTts(text)
         if (chunks.isEmpty()) return
         val a2dp = findA2dpDevice()
@@ -180,15 +180,15 @@ class GlassesAudioManager(private val context: Context) {
             val accepted =
                 elevenLabs.speak(chunks, onAllFailed = {
                     Log.w(TAG, "ElevenLabs produced no audio — falling back to Android TTS")
-                    speakWithAndroidTts(chunks, a2dp)
+                    speakWithAndroidTts(chunks, a2dp, useQueueAdd)
                 })
             if (accepted) return
             Log.w(TAG, "ElevenLabs rejected speak — falling back to Android TTS immediately")
         }
-        speakWithAndroidTts(chunks, a2dp)
+        speakWithAndroidTts(chunks, a2dp, useQueueAdd)
     }
 
-    private fun speakWithAndroidTts(chunks: List<String>, a2dp: AudioDeviceInfo?) {
+    private fun speakWithAndroidTts(chunks: List<String>, a2dp: AudioDeviceInfo?, useQueueAdd: Boolean = false) {
         if (!ttsReady) {
             Log.w(TAG, "Android TTS not ready — dropping reply")
             return
@@ -201,9 +201,10 @@ class GlassesAudioManager(private val context: Context) {
                     .build(),
             )
         }
+        val firstQueueMode = if (useQueueAdd) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH
         tts?.speak(
             chunks.first(),
-            TextToSpeech.QUEUE_FLUSH,
+            firstQueueMode,
             null,
             "hank_${System.currentTimeMillis()}_0",
         )
