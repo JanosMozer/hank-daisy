@@ -54,11 +54,11 @@ class GlassesAudioManager(private val context: Context) {
         private const val TAG = "CameraAccess:GlassesAudio"
 
         /**
-         * Flip to true once you have a paid ElevenLabs plan (free tier doesn't
-         * cover this app's per-call usage). When false, [speak] uses Android
-         * TTS directly — no per-sentence ElevenLabs round-trip and timeout.
+         * Flip to false to bypass ElevenLabs and use Android TTS directly —
+         * useful if the key runs out of quota or you want to skip the per-
+         * sentence network round-trip.
          */
-        private const val USE_ELEVENLABS = false
+        private const val USE_ELEVENLABS = true
     }
 
     private var tts: TextToSpeech? = null
