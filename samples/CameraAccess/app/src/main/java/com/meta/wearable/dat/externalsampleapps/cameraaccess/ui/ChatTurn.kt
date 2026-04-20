@@ -8,6 +8,8 @@
 
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,18 +18,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -96,30 +104,42 @@ fun ChatTurn(
         }
         Spacer(Modifier.height(4.dp))
         if (isUser) {
-            // Compact right-aligned bubble — intentionally narrower than
-            // Hank's cards so the eye goes to Hank's guidance first.
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth(0.72f)
-                        .background(
-                            AppColors.UserBubble,
-                            shape =
-                                RoundedCornerShape(
-                                    topStart = 14.dp,
-                                    topEnd = 14.dp,
-                                    bottomStart = 14.dp,
-                                    bottomEnd = 4.dp,
-                                ),
-                        )
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+            // User column — image attachment (if any) stacks above the
+            // text bubble, both right-aligned and narrower than Hank's
+            // structured cards so the eye goes to the guidance first.
+            Column(
+                modifier = Modifier.fillMaxWidth(0.72f),
+                horizontalAlignment = Alignment.End,
             ) {
-                Text(
-                    text = message.text,
-                    color = AppColors.UserBubbleText,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                )
+                if (message.imagePath != null) {
+                    AttachedImage(path = message.imagePath)
+                    Spacer(Modifier.height(4.dp))
+                }
+                if (message.text.isNotBlank()) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    AppColors.UserBubble,
+                                    shape =
+                                        RoundedCornerShape(
+                                            topStart = 14.dp,
+                                            topEnd = 14.dp,
+                                            bottomStart = 14.dp,
+                                            bottomEnd = 4.dp,
+                                        ),
+                                )
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = message.text,
+                            color = AppColors.UserBubbleText,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                }
             }
         } else {
             // Structured diagnostic blocks. Each block brings its own
@@ -130,6 +150,35 @@ fun ChatTurn(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+}
+
+/** Inline preview for an attached image stored on-disk. Decoded off-screen
+ *  via remember(path) so scrolling the chat doesn't re-decode on every
+ *  recomposition. Rounded + heightIn so a tall photo doesn't dominate the
+ *  scroll area. */
+@Composable
+private fun AttachedImage(path: String) {
+    val bitmap =
+        remember(path) {
+            try {
+                val f = File(path)
+                if (f.exists()) BitmapFactory.decodeFile(f.absolutePath) else null
+            } catch (_: Exception) {
+                null
+            }
+        }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = "Attached image",
+            contentScale = ContentScale.Fit,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 220.dp)
+                    .clip(RoundedCornerShape(14.dp)),
+        )
     }
 }
 
