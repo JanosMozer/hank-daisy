@@ -65,18 +65,21 @@ class ElevenLabsTtsService(
         get() = apiKey.isNotBlank() && voiceId.isNotBlank()
 
     /**
-     * Returns true if speak was accepted (config valid). Caller should fall
-     * back to Android TTS if false. Actual fetch failures inside the queue
-     * are logged and skipped per-sentence.
+     * Returns true if speak was accepted (config valid). [onAllFailed] fires if
+     * the queue drains without any sentence successfully playing — caller
+     * should fall back to Android TTS in that case.
      */
-    fun speak(sentences: List<String>): Boolean {
-        if (!isConfigured) return false
+    fun speak(sentences: List<String>, onAllFailed: () -> Unit = {}): Boolean {
+        if (!isConfigured) {
+            Log.w(TAG, "Not configured — apiKey blank=${apiKey.isBlank()} voiceId blank=${voiceId.isBlank()}")
+            return false
+        }
         if (sentences.isEmpty()) return true
         synchronized(queue) {
             queue.clear()
             queue.addAll(sentences)
         }
-        startConsumer()
+        startConsumer(onAllFailed)
         return true
     }
 
@@ -99,12 +102,13 @@ class ElevenLabsTtsService(
         scope.cancel()
     }
 
-    private fun startConsumer() {
+    private fun startConsumer(onAllFailed: () -> Unit) {
         val existing = consumerJob
         if (existing != null && existing.isActive) return
         onSpeakingChanged(true)
         consumerJob =
             scope.launch {
+                var anyPlayed = false
                 try {
                     while (isActive) {
                         val sentence =
@@ -119,6 +123,7 @@ class ElevenLabsTtsService(
                         val file = writeTempFile(mp3)
                         try {
                             playAndAwait(file)
+                            anyPlayed = true
                         } finally {
                             try {
                                 file.delete()
@@ -127,6 +132,14 @@ class ElevenLabsTtsService(
                     }
                 } finally {
                     onSpeakingChanged(false)
+                    if (!anyPlayed) {
+                        Log.w(TAG, "Queue drained with nothing played — invoking fallback")
+                        try {
+                            onAllFailed()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "onAllFailed callback threw", e)
+                        }
+                    }
                 }
             }
     }

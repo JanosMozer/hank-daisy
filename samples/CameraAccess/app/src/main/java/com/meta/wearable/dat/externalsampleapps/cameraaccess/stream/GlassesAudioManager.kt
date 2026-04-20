@@ -169,12 +169,21 @@ class GlassesAudioManager(private val context: Context) {
             TAG,
             "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"} (${chunks.size} chunks)",
         )
-        if (elevenLabs.isConfigured && elevenLabs.speak(chunks)) {
-            return
+        if (elevenLabs.isConfigured) {
+            val accepted =
+                elevenLabs.speak(chunks, onAllFailed = {
+                    Log.w(TAG, "ElevenLabs produced no audio — falling back to Android TTS")
+                    speakWithAndroidTts(chunks, a2dp)
+                })
+            if (accepted) return
+            Log.w(TAG, "ElevenLabs rejected speak — falling back to Android TTS immediately")
         }
-        // Fallback: Android TTS
+        speakWithAndroidTts(chunks, a2dp)
+    }
+
+    private fun speakWithAndroidTts(chunks: List<String>, a2dp: AudioDeviceInfo?) {
         if (!ttsReady) {
-            Log.w(TAG, "ElevenLabs unavailable and Android TTS not ready — dropping reply")
+            Log.w(TAG, "Android TTS not ready — dropping reply")
             return
         }
         if (a2dp != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -185,9 +194,19 @@ class GlassesAudioManager(private val context: Context) {
                     .build(),
             )
         }
-        tts?.speak(chunks.first(), TextToSpeech.QUEUE_FLUSH, null, "hank_${System.currentTimeMillis()}_0")
+        tts?.speak(
+            chunks.first(),
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "hank_${System.currentTimeMillis()}_0",
+        )
         for ((i, chunk) in chunks.withIndex().drop(1)) {
-            tts?.speak(chunk, TextToSpeech.QUEUE_ADD, null, "hank_${System.currentTimeMillis()}_$i")
+            tts?.speak(
+                chunk,
+                TextToSpeech.QUEUE_ADD,
+                null,
+                "hank_${System.currentTimeMillis()}_$i",
+            )
         }
     }
 
