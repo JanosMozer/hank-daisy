@@ -183,6 +183,7 @@ fun CameraAccessScaffold(
                   sessionVm = sessionVm,
                   onOpenProfile = { sessionVm.openProfile() },
                   onStartStream = startGlassesStream,
+                  isStreamingNow = uiState.isStreaming,
               )
             }
           }
@@ -191,6 +192,7 @@ fun CameraAccessScaffold(
                   sessionVm = sessionVm,
                   onOpenProfile = { sessionVm.openProfile() },
                   onStartStream = startGlassesStream,
+                  isStreamingNow = uiState.isStreaming,
               )
         }
 
@@ -248,13 +250,17 @@ private fun MainTabs(
     sessionVm: SessionViewModel,
     onOpenProfile: () -> Unit,
     onStartStream: () -> Unit,
+    isStreamingNow: Boolean = false,
 ) {
   val state by sessionVm.uiState.collectAsStateWithLifecycle()
   Column(modifier = Modifier.fillMaxSize()) {
     Box(modifier = Modifier.weight(1f)) {
       when (state.currentTab) {
         AppTab.CONVOS ->
-            ConvosScreen(onNewSession = onStartStream)
+            ConvosScreen(
+                onNewSession = onStartStream,
+                isStreaming = isStreamingNow,
+            )
         AppTab.CHATS ->
             SessionsHomeScreen(
                 sessions = state.sessions,
