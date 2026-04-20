@@ -82,11 +82,20 @@ fun CameraAccessScaffold(
     }
   }
 
+  // Fallback listener for any code path that still sets streamRequested —
+  // kept for safety even though the + button now calls navigateToStreaming
+  // directly.
   LaunchedEffect(sessionState.streamRequested) {
     if (sessionState.streamRequested && !uiState.isStreaming) {
       viewModel.navigateToStreaming(onRequestWearablesPermission)
       sessionVm.clearStreamRequest()
     }
+  }
+
+  // Direct lambda the Convos "+" button fires — avoids the streamRequested
+  // indirection so the stream start is unconditional.
+  val startGlassesStream: () -> Unit = {
+    viewModel.navigateToStreaming(onRequestWearablesPermission)
   }
 
   val systemDark = isSystemInDarkTheme()
@@ -173,10 +182,16 @@ fun CameraAccessScaffold(
               MainTabs(
                   sessionVm = sessionVm,
                   onOpenProfile = { sessionVm.openProfile() },
+                  onStartStream = startGlassesStream,
               )
             }
           }
-          else -> MainTabs(sessionVm = sessionVm, onOpenProfile = { sessionVm.openProfile() })
+          else ->
+              MainTabs(
+                  sessionVm = sessionVm,
+                  onOpenProfile = { sessionVm.openProfile() },
+                  onStartStream = startGlassesStream,
+              )
         }
 
         SnackbarHost(
@@ -232,13 +247,14 @@ fun CameraAccessScaffold(
 private fun MainTabs(
     sessionVm: SessionViewModel,
     onOpenProfile: () -> Unit,
+    onStartStream: () -> Unit,
 ) {
   val state by sessionVm.uiState.collectAsStateWithLifecycle()
   Column(modifier = Modifier.fillMaxSize()) {
     Box(modifier = Modifier.weight(1f)) {
       when (state.currentTab) {
         AppTab.CONVOS ->
-            ConvosScreen(onNewSession = { sessionVm.requestNewSession() })
+            ConvosScreen(onNewSession = onStartStream)
         AppTab.CHATS ->
             SessionsHomeScreen(
                 sessions = state.sessions,
