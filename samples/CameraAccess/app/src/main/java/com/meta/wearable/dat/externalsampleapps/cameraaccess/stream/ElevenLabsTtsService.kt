@@ -15,10 +15,13 @@ import android.util.Log
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -45,7 +48,10 @@ class ElevenLabsTtsService(
 ) {
     companion object {
         private const val TAG = "CameraAccess:ElevenLabs"
-        private const val MODEL_ID = "eleven_turbo_v2_5"
+        // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms
+        // first-chunk generation vs ~300ms for turbo). Slightly less
+        // expressive but much faster for realtime conversation.
+        private const val MODEL_ID = "eleven_flash_v2_5"
         private const val ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech"
     }
 
@@ -110,25 +116,53 @@ class ElevenLabsTtsService(
             scope.launch {
                 var anyPlayed = false
                 try {
-                    while (isActive) {
-                        val sentence =
-                            synchronized(queue) {
-                                if (queue.isEmpty()) null else queue.removeFirst()
-                            } ?: break
-                        val mp3 = fetchAudio(sentence)
-                        if (mp3 == null) {
-                            Log.w(TAG, "Skipping sentence — fetch failed: ${sentence.take(40)}")
-                            continue
-                        }
-                        val file = writeTempFile(mp3)
-                        try {
-                            playAndAwait(file)
-                            anyPlayed = true
-                        } finally {
+                    // Pipeline: while the current clause's audio is playing we
+                    // fetch the next clause in parallel via `async`. Uses
+                    // coroutineScope so the async child is cancelled when the
+                    // consumer is cancelled (via stop()).
+                    coroutineScope {
+                        var prefetch: Deferred<ByteArray?>? = null
+                        var prefetchedFor: String? = null
+                        while (isActive) {
+                            val sentence =
+                                synchronized(queue) {
+                                    if (queue.isEmpty()) null else queue.removeFirst()
+                                } ?: break
+                            val mp3: ByteArray? =
+                                if (prefetchedFor == sentence && prefetch != null) {
+                                    try {
+                                        prefetch.await()
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                } else {
+                                    prefetch?.cancel()
+                                    fetchAudio(sentence)
+                                }
+                            prefetch = null
+                            prefetchedFor = null
+                            if (mp3 == null) {
+                                Log.w(TAG, "Skipping clause — fetch failed: ${sentence.take(40)}")
+                                continue
+                            }
+                            val file = writeTempFile(mp3)
+                            // Kick off prefetch for the next clause so audio is
+                            // ready the moment current playback ends.
+                            val next = synchronized(queue) { queue.firstOrNull() }
+                            if (next != null) {
+                                prefetchedFor = next
+                                prefetch = async { fetchAudio(next) }
+                            }
                             try {
-                                file.delete()
-                            } catch (_: Exception) {}
+                                playAndAwait(file)
+                                anyPlayed = true
+                            } finally {
+                                try {
+                                    file.delete()
+                                } catch (_: Exception) {}
+                            }
                         }
+                        prefetch?.cancel()
                     }
                 } finally {
                     onSpeakingChanged(false)
