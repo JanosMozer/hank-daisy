@@ -8,7 +8,10 @@
 
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,9 +34,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,7 +48,10 @@ import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.session.SessionViewModel
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.session.ThemeMode
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.GeminiService
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
+import kotlinx.coroutines.launch
 
 private fun initialsOf(name: String): String =
     name.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
@@ -60,8 +68,10 @@ fun CameraAccessScaffold(
   val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val sessionVm: SessionViewModel = viewModel()
   val sessionState by sessionVm.uiState.collectAsStateWithLifecycle()
+  val geminiService = remember { GeminiService() }
+  val scope = rememberCoroutineScope()
+  val activity = LocalActivity.current as? ComponentActivity
 
-  // Observe recent errors and show snackbar
   LaunchedEffect(uiState.recentError) {
     uiState.recentError?.let { errorMessage ->
       snackbarHostState.showSnackbar(errorMessage)
@@ -69,8 +79,6 @@ fun CameraAccessScaffold(
     }
   }
 
-  // When the user taps "+", trigger streaming via the existing WearablesVM
-  // flow. Once isStreaming flips on, scaffold below routes to StreamScreen.
   LaunchedEffect(sessionState.streamRequested) {
     if (sessionState.streamRequested && !uiState.isStreaming) {
       viewModel.navigateToStreaming(onRequestWearablesPermission)
@@ -78,97 +86,150 @@ fun CameraAccessScaffold(
     }
   }
 
-  Surface(modifier = modifier.fillMaxSize(), color = AppColors.Background) {
-    Box(modifier = Modifier.fillMaxSize()) {
-      when {
-        !sessionState.splashShown ->
-            SplashScreen(onFinished = { sessionVm.markSplashDone() })
-        uiState.isStreaming ->
-            StreamScreen(
-                wearablesViewModel = viewModel,
-                onSessionEnd = { sessionVm.saveStreamSession(it) },
-            )
-        !uiState.isRegistered ->
-            HomeScreen(viewModel = viewModel)
-        sessionState.profileOpen ->
-            ProfileScreen(
-                profile = sessionState.userProfile,
-                onBack = { sessionVm.closeProfile() },
-                onSave = { sessionVm.updateProfile(it) },
-            )
-        sessionState.viewingSessionId != null -> {
-          val session =
-              sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
-          if (session != null) {
-            ChatHistoryScreen(
-                title = session.title,
-                messages = session.messages,
-                onBack = { sessionVm.closeSession() },
-            )
-          } else {
-            sessionVm.closeSession()
-            SessionsHomeScreen(
-                sessions = sessionState.sessions,
-                userInitials = initialsOf(sessionState.userProfile.name),
-                onOpenSession = { sessionVm.openSession(it) },
-                onNewSession = { sessionVm.requestNewSession() },
-                onOpenProfile = { sessionVm.openProfile() },
-            )
-          }
-        }
-        else ->
-            SessionsHomeScreen(
-                sessions = sessionState.sessions,
-                userInitials = initialsOf(sessionState.userProfile.name),
-                onOpenSession = { sessionVm.openSession(it) },
-                onNewSession = { sessionVm.requestNewSession() },
-                onOpenProfile = { sessionVm.openProfile() },
-            )
+  val palette =
+      when (sessionState.settings.themeMode) {
+        ThemeMode.DARK -> DarkPalette
+        else -> LightPalette // SYSTEM falls back to LIGHT for now
       }
 
-      SnackbarHost(
-          hostState = snackbarHostState,
-          modifier =
-              Modifier.align(Alignment.BottomCenter)
-                  .navigationBarsPadding()
-                  .padding(horizontal = 16.dp, vertical = 32.dp),
-          snackbar = { data ->
-            Snackbar(
-                shape = RoundedCornerShape(24.dp),
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Error,
-                    contentDescription = "Camera Access error",
-                    tint = MaterialTheme.colorScheme.error,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(data.visuals.message)
-              }
+  CompositionLocalProvider(LocalAppPalette provides palette) {
+    Surface(modifier = modifier.fillMaxSize(), color = AppColors.Background) {
+      Box(modifier = Modifier.fillMaxSize()) {
+        when {
+          !sessionState.splashShown ->
+              SplashScreen(onFinished = { sessionVm.markSplashDone() })
+          uiState.isStreaming ->
+              StreamScreen(
+                  wearablesViewModel = viewModel,
+                  onSessionEnd = { sessionVm.saveStreamSession(it) },
+              )
+          !uiState.isRegistered ->
+              HomeScreen(viewModel = viewModel)
+          sessionState.profileOpen ->
+              ProfileScreen(
+                  profile = sessionState.userProfile,
+                  onBack = { sessionVm.closeProfile() },
+                  onSave = { sessionVm.updateProfile(it) },
+              )
+          sessionState.viewingSessionId != null -> {
+            val session =
+                sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
+            if (session != null) {
+              val ctx = activity?.applicationContext
+              ChatHistoryScreen(
+                  title = session.title,
+                  messages = session.messages,
+                  onBack = { sessionVm.closeSession() },
+                  onSummariseAndExport =
+                      if (ctx != null) {
+                        {
+                          scope.launch {
+                            ChatSummaryPdf.summariseAndShare(
+                                context = ctx,
+                                session = session,
+                                gemini = geminiService,
+                            )
+                          }
+                        }
+                      } else null,
+              )
+            } else {
+              sessionVm.closeSession()
+              MainTabs(
+                  sessionVm = sessionVm,
+                  onOpenProfile = { sessionVm.openProfile() },
+              )
             }
-          },
-      )
-
-      if (BuildConfig.DEBUG) {
-        FloatingActionButton(
-            onClick = { viewModel.showDebugMenu() },
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
-          Icon(Icons.Default.BugReport, contentDescription = "Debug Menu")
+          }
+          else -> MainTabs(sessionVm = sessionVm, onOpenProfile = { sessionVm.openProfile() })
         }
 
-        if (uiState.isDebugMenuVisible) {
-          ModalBottomSheet(
-              onDismissRequest = { viewModel.hideDebugMenu() },
-              sheetState = bottomSheetState,
-              modifier = Modifier.fillMaxSize(),
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier =
+                Modifier.align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 32.dp),
+            snackbar = { data ->
+              Snackbar(
+                  shape = RoundedCornerShape(24.dp),
+                  containerColor = MaterialTheme.colorScheme.errorContainer,
+                  contentColor = MaterialTheme.colorScheme.onErrorContainer,
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(
+                      imageVector = Icons.Default.Error,
+                      contentDescription = "Camera Access error",
+                      tint = MaterialTheme.colorScheme.error,
+                  )
+                  Spacer(modifier = Modifier.width(8.dp))
+                  Text(data.visuals.message)
+                }
+              }
+            },
+        )
+
+        if (BuildConfig.DEBUG) {
+          FloatingActionButton(
+              onClick = { viewModel.showDebugMenu() },
+              modifier = Modifier.align(Alignment.CenterEnd),
           ) {
-            MockDeviceKitScreen(modifier = Modifier.fillMaxSize())
+            Icon(Icons.Default.BugReport, contentDescription = "Debug Menu")
+          }
+
+          if (uiState.isDebugMenuVisible) {
+            ModalBottomSheet(
+                onDismissRequest = { viewModel.hideDebugMenu() },
+                sheetState = bottomSheetState,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+              MockDeviceKitScreen(modifier = Modifier.fillMaxSize())
+            }
           }
         }
       }
     }
+  }
+}
+
+/** Tab host — chat list / tips / settings / profile — sharing a bottom nav. */
+@Composable
+private fun MainTabs(
+    sessionVm: SessionViewModel,
+    onOpenProfile: () -> Unit,
+) {
+  val state by sessionVm.uiState.collectAsStateWithLifecycle()
+  Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.weight(1f)) {
+      when (state.currentTab) {
+        AppTab.CHATS ->
+            SessionsHomeScreen(
+                sessions = state.sessions,
+                userInitials = initialsOf(state.userProfile.name),
+                onOpenSession = { sessionVm.openSession(it) },
+                onNewSession = { sessionVm.requestNewSession() },
+                onOpenProfile = onOpenProfile,
+            )
+        AppTab.TIPS -> TipsScreen()
+        AppTab.SETTINGS ->
+            SettingsScreen(
+                settings = state.settings,
+                onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
+                onTextScaleChange = {
+                  sessionVm.updateSettings(state.settings.copy(textScale = it))
+                },
+                onHighContrastChange = {
+                  sessionVm.updateSettings(state.settings.copy(highContrast = it))
+                },
+                onHapticChange = {
+                  sessionVm.updateSettings(state.settings.copy(hapticFeedback = it))
+                },
+            )
+        AppTab.PROFILE -> {
+          LaunchedEffect(Unit) { onOpenProfile() }
+        }
+      }
+    }
+    BottomNav(current = state.currentTab, onSelect = { sessionVm.selectTab(it) })
   }
 }

@@ -23,10 +23,13 @@ import org.json.JSONObject
 data class SessionsUiState(
     val sessions: List<Session> = emptyList(),
     val userProfile: UserProfile = UserProfile(),
+    val settings: AppSettings = AppSettings(),
     val splashShown: Boolean = false,
     val streamRequested: Boolean = false,
     val viewingSessionId: String? = null,
     val profileOpen: Boolean = false,
+    val currentTab: com.meta.wearable.dat.externalsampleapps.cameraaccess.ui.AppTab =
+        com.meta.wearable.dat.externalsampleapps.cameraaccess.ui.AppTab.CHATS,
 )
 
 class SessionViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,6 +39,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         private const val PREFS = "hank_sessions_v1"
         private const val KEY_SESSIONS = "sessions_json"
         private const val KEY_PROFILE = "profile_json"
+        private const val KEY_SETTINGS = "settings_json"
     }
 
     private val prefs =
@@ -46,6 +50,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             SessionsUiState(
                 sessions = recoverDraftIntoSessions(loadSessions()),
                 userProfile = loadProfile(),
+                settings = loadSettings(),
             ),
         )
     val uiState: StateFlow<SessionsUiState> = _uiState.asStateFlow()
@@ -96,6 +101,40 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
 
     fun openProfile() = _uiState.update { it.copy(profileOpen = true) }
     fun closeProfile() = _uiState.update { it.copy(profileOpen = false) }
+
+    fun selectTab(tab: com.meta.wearable.dat.externalsampleapps.cameraaccess.ui.AppTab) {
+        _uiState.update { it.copy(currentTab = tab) }
+    }
+
+    fun updateSettings(settings: AppSettings) {
+        _uiState.update { it.copy(settings = settings) }
+        persistSettings(settings)
+    }
+
+    private fun loadSettings(): AppSettings {
+        val raw = prefs.getString(KEY_SETTINGS, null) ?: return AppSettings()
+        return try {
+            val o = JSONObject(raw)
+            AppSettings(
+                themeMode = ThemeMode.valueOf(o.optString("theme", "LIGHT")),
+                textScale = TextScale.valueOf(o.optString("textScale", "NORMAL")),
+                highContrast = o.optBoolean("highContrast", false),
+                hapticFeedback = o.optBoolean("hapticFeedback", true),
+            )
+        } catch (_: Exception) {
+            AppSettings()
+        }
+    }
+
+    private fun persistSettings(s: AppSettings) {
+        val o =
+            JSONObject()
+                .put("theme", s.themeMode.name)
+                .put("textScale", s.textScale.name)
+                .put("highContrast", s.highContrast)
+                .put("hapticFeedback", s.hapticFeedback)
+        prefs.edit().putString(KEY_SETTINGS, o.toString()).apply()
+    }
 
     fun updateProfile(profile: UserProfile) {
         _uiState.update { it.copy(userProfile = profile) }

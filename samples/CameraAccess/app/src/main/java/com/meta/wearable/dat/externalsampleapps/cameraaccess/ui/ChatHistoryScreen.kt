@@ -52,6 +52,7 @@ fun ChatHistoryScreen(
     messages: List<ChatMessage>,
     onBack: () -> Unit,
     onExport: (() -> Unit)? = null,
+    onSummariseAndExport: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -102,6 +103,23 @@ fun ChatHistoryScreen(
                     fontSize = 11.sp,
                 )
             }
+            if (onSummariseAndExport != null && messages.isNotEmpty()) {
+                Box(
+                    modifier =
+                        Modifier
+                            .background(AppColors.Accent, shape = RoundedCornerShape(8.dp))
+                            .clickable(onClick = onSummariseAndExport)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = "\uD83D\uDCC4 Summary",
+                        color = AppColors.AccentOn,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+            }
             if (onExport != null && messages.isNotEmpty()) {
                 Box(
                     modifier =
@@ -111,7 +129,7 @@ fun ChatHistoryScreen(
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
                     Text(
-                        text = "↑ Export",
+                        text = "↑ JSON",
                         color = AppColors.TextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
