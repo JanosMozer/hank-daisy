@@ -56,11 +56,6 @@ android {
         "ELEVENLABS_VOICE_ID",
         "\"${localProps.getProperty("elevenlabs_voice_id", "")}\"",
     )
-    buildConfigField(
-        "String",
-        "HANK_AGENT_URL",
-        "\"${localProps.getProperty("hank_agent_url", "ws://10.0.2.2:8765")}\"",
-    )
   }
 
   buildTypes {

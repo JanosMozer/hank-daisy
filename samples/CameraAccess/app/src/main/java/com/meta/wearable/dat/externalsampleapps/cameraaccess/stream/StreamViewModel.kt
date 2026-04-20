@@ -88,7 +88,6 @@ class StreamViewModel(
   private var stream: Stream? = null
   private val liveStreamServer = LiveStreamServer(8080)
   private val geminiService = GeminiService()
-  private val hankAgent = HankAgentClient(BuildConfig.HANK_AGENT_URL)
   private val glassesAudio = GlassesAudioManager(application)
   private val voiceCommand = VoiceCommandManager(application)
   private var voiceJob: Job? = null
@@ -98,15 +97,6 @@ class StreamViewModel(
   private var analyzeJob: Job? = null
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
-  private var agentEventJob: Job? = null
-  private var agentResponseBuffer = StringBuilder()
-  /** Full assistant response accumulated across streaming chunks; used to
-   * write the chat panel + conversation history once Done arrives. */
-  private val agentFullResponse = StringBuilder()
-  /** The user question that initiated the current agent stream — paired with
-   * the full response on Done so multi-turn context survives the WebSocket
-   * path the same way it does on the direct-OpenRouter fallback. */
-  @Volatile private var pendingAgentQuestion: String? = null
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
   @Volatile private var lastTurnAt: Long = 0L
@@ -220,12 +210,6 @@ class StreamViewModel(
       liveStreamServer.start()
     } catch (e: Exception) {
       Log.w(TAG, "liveStreamServer.start() failed (continuing)", e)
-    }
-    try {
-      hankAgent.connect()
-      observeAgentEvents()
-    } catch (e: Exception) {
-      Log.w(TAG, "hankAgent.connect() failed (continuing)", e)
     }
     try {
       StreamForegroundService.start(getApplication())
@@ -490,9 +474,6 @@ class StreamViewModel(
     try { stream?.stop() } catch (e: Exception) { Log.w(TAG, "stream?.stop() in stopStream", e) }
     stream = null
     try { liveStreamServer.stop() } catch (e: Exception) { Log.w(TAG, "liveStreamServer.stop()", e) }
-    try { hankAgent.disconnect() } catch (e: Exception) { Log.w(TAG, "hankAgent.disconnect()", e) }
-    try { agentEventJob?.cancel() } catch (_: Exception) {}
-    agentEventJob = null
     try { voiceCommand.stopContinuousListening() } catch (_: Exception) {}
     try { voiceJob?.cancel() } catch (_: Exception) {}
     voiceJob = null
@@ -601,75 +582,6 @@ class StreamViewModel(
     }
   }
 
-  /** Observe streaming responses from the Hank agent WebSocket. */
-  private fun observeAgentEvents() {
-    agentEventJob?.cancel()
-    agentEventJob = viewModelScope.launch {
-      hankAgent.events.collect { event ->
-        when (event) {
-          is HankAgentClient.Event.Chunk -> {
-            // Accumulate text and check for sentence boundaries
-            agentResponseBuffer.append(event.text)
-            agentFullResponse.append(event.text)
-            // Speak completed sentences (end with . ! ? followed by space or end)
-            val sentencePattern = Regex("([^.!?]*[.!?])\\s+|([^.!?]*[.!?])$")
-            val matches = sentencePattern.findAll(agentResponseBuffer)
-            var lastIndex = 0
-            for (match in matches) {
-              val sentence = (match.groupValues[1].ifBlank { match.groupValues[2] }).trim()
-              if (sentence.isNotEmpty()) {
-                glassesAudio.speak(sentence, useQueueAdd = lastIndex > 0)
-              }
-              lastIndex = match.range.last + 1
-            }
-            // Keep unmatched text in buffer for next chunk
-            if (lastIndex > 0) {
-              agentResponseBuffer.delete(0, lastIndex)
-            }
-          }
-          is HankAgentClient.Event.Done -> {
-            // Speak any remaining text
-            val remaining = agentResponseBuffer.toString().trim()
-            if (remaining.isNotEmpty()) {
-              glassesAudio.speak(remaining, useQueueAdd = true)
-            }
-            agentResponseBuffer.clear()
-
-            // Persist the full streamed reply to chat panel + history so the
-            // UI shows it and subsequent turns get the multi-turn context.
-            val full = agentFullResponse.toString().trim()
-            agentFullResponse.clear()
-            val q = pendingAgentQuestion
-            pendingAgentQuestion = null
-            if (full.isNotEmpty()) {
-              if (q != null) {
-                conversationHistory.add(GeminiService.Turn("user", q))
-              }
-              conversationHistory.add(GeminiService.Turn("assistant", full))
-              while (conversationHistory.size > 24) {
-                conversationHistory.removeAt(0)
-              }
-              appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, full))
-            }
-
-            _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = full) }
-            // Note: voiceCommand.startConversationFollowUp() will fire from
-            // observeTtsSpeaking() when isSpeaking=false, after TTS finishes.
-          }
-          is HankAgentClient.Event.Error -> {
-            Log.e(TAG, "Agent error: ${event.message}")
-            _uiState.update { it.copy(isAnalyzing = false) }
-          }
-          is HankAgentClient.Event.Connected -> {
-            Log.d(TAG, "Connected to Hank agent")
-          }
-          is HankAgentClient.Event.Disconnected -> {
-            Log.d(TAG, "Disconnected from Hank agent")
-          }
-        }
-      }
-    }
-  }
 
   /** Manual Ask Hank — skips wake word, goes straight to listening for question. */
   fun askHank() {
@@ -692,57 +604,32 @@ class StreamViewModel(
   }
 
   private fun analyzeWithQuestion(question: String) {
+    val currentFrame = _uiState.value.videoFrame ?: return
     if (_uiState.value.isAnalyzing) return
 
     _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
-    appendChatMessages(ChatMessage(ChatMessage.Role.USER, question))
 
     analyzeJob?.cancel()
     analyzeJob =
         viewModelScope.launch {
-          val currentFrame = _uiState.value.videoFrame
+          val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
+          val historySnapshot = conversationHistory.toList()
+          val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
+          frameCopy.recycle()
 
-          if (hankAgent.isConnected()) {
-            // Streaming path — Python agent server. Response chunks are
-            // observed by observeAgentEvents() which speaks them per-sentence.
-            agentResponseBuffer.clear()
-            agentFullResponse.clear()
-            pendingAgentQuestion = question
-            hankAgent.sendQuery(question, currentFrame)
-            lastTurnAt = System.currentTimeMillis()
-          } else {
-            // Fallback: direct OpenRouter call. Used when the Python agent
-            // server isn't running (e.g., on a real device, or before Janos's
-            // backend is started). Same behaviour we had before the WebSocket
-            // refactor.
-            Log.w(TAG, "Hank agent not connected — falling back to direct OpenRouter call")
-            if (currentFrame == null) {
-              _uiState.update { it.copy(isAnalyzing = false) }
-              return@launch
-            }
-            try {
-              val frameCopy =
-                  currentFrame.copy(
-                      currentFrame.config ?: Bitmap.Config.ARGB_8888,
-                      true,
-                  )
-              val historySnapshot = conversationHistory.toList()
-              val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
-              frameCopy.recycle()
-              conversationHistory.add(GeminiService.Turn("user", question))
-              conversationHistory.add(GeminiService.Turn("assistant", response))
-              while (conversationHistory.size > 24) {
-                conversationHistory.removeAt(0)
-              }
-              appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
-              _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
-              glassesAudio.speak(response)
-              lastTurnAt = System.currentTimeMillis()
-            } catch (e: Exception) {
-              Log.e(TAG, "Direct OpenRouter fallback failed", e)
-              _uiState.update { it.copy(isAnalyzing = false) }
-            }
+          conversationHistory.add(GeminiService.Turn("user", question))
+          conversationHistory.add(GeminiService.Turn("assistant", response))
+          while (conversationHistory.size > 24) {
+            conversationHistory.removeAt(0)
           }
+          appendChatMessages(
+              ChatMessage(ChatMessage.Role.USER, question),
+              ChatMessage(ChatMessage.Role.ASSISTANT, response),
+          )
+
+          _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
+          glassesAudio.speak(response)
+          lastTurnAt = System.currentTimeMillis()
         }
   }
 
