@@ -93,14 +93,15 @@ fun ChatOnlyScreen(
         }
     }
 
+    // NOTE: do NOT put .imePadding() here — applying IME insets at the
+    // root pushes the whole screen (top bar included) up by the keyboard
+    // height, which feels jarring. Only the bottom input bar needs to lift.
     Column(
         modifier =
             modifier
                 .fillMaxSize()
                 .background(AppColors.Background)
-                .statusBarsPadding()
-                .imePadding()
-                .navigationBarsPadding(),
+                .statusBarsPadding(),
     ) {
         // Top bar
         Row(
@@ -177,10 +178,17 @@ fun ChatOnlyScreen(
             }
         }
 
-        // Bottom input bar
+        // Bottom input bar — IME inset applied here only so the keyboard
+        // lifts the input above itself without disturbing the rest of the
+        // screen. Navigation-bar inset stays scoped to the bottom too.
         Column(
             modifier =
-                Modifier.fillMaxWidth().background(AppColors.Surface).padding(12.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(AppColors.Surface)
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .padding(12.dp),
         ) {
             Spacer(
                 modifier =
