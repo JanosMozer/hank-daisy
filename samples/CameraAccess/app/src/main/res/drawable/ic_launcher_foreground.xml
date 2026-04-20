@@ -2,13 +2,11 @@
 <!--
     Hank & Daisy launcher-icon foreground.
 
-    Adaptive-icon viewport is 108x108; the safe zone (visible after
-    system masks apply) is the centred 66x66 square (x 21..87, y 21..87).
-
-    We render a purple "H&D" monogram inside the safe zone. Full
-    "Hank & Daisy" text would be illegible at launcher-icon sizes; the
-    long-form logo is used on the Splash / Home screens where there is
-    room for it.
+    Adaptive-icon viewport is 108x108; the safe zone after system masks is
+    the centred 66x66 square. We render a vertically-stacked H · & · D
+    monogram in purple (#7C3AED) on the white background, deliberately
+    smaller than the safe zone so the icon has breathing room after the
+    launcher applies its circle / squircle mask.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -16,19 +14,19 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- H -->
+    <!-- H (top, x 45..63, y 28..46) -->
     <path
         android:fillColor="#7C3AED"
-        android:pathData="M24,30 L32,30 L32,52 L46,52 L46,30 L54,30 L54,78 L46,78 L46,60 L32,60 L32,78 L24,78 Z" />
+        android:pathData="M45,28 L48,28 L48,35 L60,35 L60,28 L63,28 L63,46 L60,46 L60,38 L48,38 L48,46 L45,46 Z" />
 
-    <!-- & (stylised as two stacked rings — readable at small sizes) -->
+    <!-- & (middle, stylised as a figure-8 of two rings at x 49..59, y 50..58) -->
     <path
         android:fillColor="#7C3AED"
-        android:pathData="M62,44 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z M62,65 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z" />
+        android:pathData="M54,52 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0 Z M54,56.5 m-2.2,0 a2.2,2.2 0 1,0 4.4,0 a2.2,2.2 0 1,0 -4.4,0 Z" />
 
-    <!-- D (with hollow interior via evenOdd fill) -->
+    <!-- D (bottom, x 45..63, y 62..80, evenOdd gives the hollow bowl) -->
     <path
         android:fillColor="#7C3AED"
         android:fillType="evenOdd"
-        android:pathData="M74,30 L82,30 C91,30 96,40 96,54 C96,68 91,78 82,78 L74,78 Z M80,38 L82,38 C86,38 90,46 90,54 C90,62 86,70 82,70 L80,70 Z" />
+        android:pathData="M45,62 L54,62 C60,62 63,66 63,71 C63,76 60,80 54,80 L45,80 Z M48,65 L54,65 C58,65 60,68 60,71 C60,74 58,77 54,77 L48,77 Z" />
 </vector>
