@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Wraps the user-supplied "Hank & Daisy" PNG (ic_launcher_logo.png) with
-    insets so the artwork sits inside the adaptive-icon safe zone (centre
-    66dp of the 108dp viewport). Without this, launcher masks (circle /
-    squircle) clip the wordmark at the edges.
+    Wraps the user-supplied "Hank & Daisy" PNG (ic_launcher_logo.png) as a
+    centered bitmap inside an inset so:
+      1. Landscape/badge artwork is preserved (not stretched to fill the
+         square adaptive-icon viewport).
+      2. The art sits close to the 72dp launcher "visible zone" without
+         punching through the 108dp outer edge, so circle + squircle
+         masks never clip the outline.
+
+    Inset 16dp = artwork fits inside a 76dp square centred in the 108dp
+    viewport. A little looser than the conservative 66dp safe zone, but
+    still mask-safe for every standard launcher shape. Bump to 20dp if you
+    see edge clipping on a specific device.
 -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/ic_launcher_logo"
-    android:inset="22dp" />
+    android:inset="16dp">
+    <bitmap
+        android:src="@drawable/ic_launcher_logo"
+        android:gravity="center"
+        android:antialias="true"
+        android:filter="true" />
+</inset>

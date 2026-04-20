@@ -92,8 +92,11 @@ fun StatusPill(
                     )
                 Status.Speaking ->
                     Triple(
-                        Color(0xFF4C1D95).copy(alpha = 0.92f),
-                        Color(0xFFA78BFA),
+                        // Teal-tinted surface + bright teal dot to match the
+                        // new brand palette. Kept saturated so the "Hank's
+                        // talking" cue stands out against the camera feed.
+                        Color(0xFF134E4A).copy(alpha = 0.92f),
+                        Color(0xFF2DD4BF),
                         "Hank speaking",
                     )
             }

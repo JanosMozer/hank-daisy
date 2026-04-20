@@ -36,6 +36,9 @@ data class AppPalette(
     val HankBubbleText: Color,
 )
 
+// Teal-based brand palette — pulled from the Hank & Daisy logo (dark teal
+// script strokes + mint body). Everything else stays neutral B&W so the
+// teal does the whole job of "app identity".
 val LightPalette =
     AppPalette(
         Background = Color(0xFFF9FAFB),
@@ -45,14 +48,16 @@ val LightPalette =
         TextPrimary = Color(0xFF111827),
         TextSecondary = Color(0xFF6B7280),
         TextMuted = Color(0xFF9CA3AF),
-        Accent = Color(0xFF7C3AED),
-        AccentSoft = Color(0xFFEDE9FE),
+        // Accent = teal-600: saturated enough to read as a headline colour
+        // at 13sp, close to the dark outlines of the logo script.
+        Accent = Color(0xFF0D9488),
+        // Pale mint — matches the interior fill of the logo badge.
+        AccentSoft = Color(0xFFCCFBF1),
         AccentOn = Color(0xFFFFFFFF),
-        // Purple-themed chat bubbles (no more generic blue/grey).
-        UserBubble = Color(0xFF7C3AED),       // brand accent
+        UserBubble = Color(0xFF0D9488),       // brand teal
         UserBubbleText = Color(0xFFFFFFFF),
-        HankBubble = Color(0xFFEDE9FE),       // soft accent tint
-        HankBubbleText = Color(0xFF4C1D95),   // deep purple text
+        HankBubble = Color(0xFFCCFBF1),       // soft teal tint
+        HankBubbleText = Color(0xFF0F766E),   // deep teal text (teal-700)
     )
 
 val DarkPalette =
@@ -64,15 +69,15 @@ val DarkPalette =
         TextPrimary = Color(0xFFF3F4F6),
         TextSecondary = Color(0xFF9CA3AF),
         TextMuted = Color(0xFF6B7280),
-        Accent = Color(0xFFA78BFA),
-        AccentSoft = Color(0xFF4C1D95),
-        AccentOn = Color(0xFF0B0B0D),
-        // Same purple identity, tuned darker so the bubbles read on a dark
-        // background without glowing.
-        UserBubble = Color(0xFF7C3AED),       // brand accent (kept saturated)
+        // Brighter teal on dark — teal-400 pops against the near-black
+        // background without glowing the way a deeper teal would.
+        Accent = Color(0xFF2DD4BF),
+        AccentSoft = Color(0xFF134E4A),       // teal-900 surface tint
+        AccentOn = Color(0xFF042F2E),         // very dark teal text on accent
+        UserBubble = Color(0xFF14B8A6),       // teal-500, saturated
         UserBubbleText = Color(0xFFFFFFFF),
-        HankBubble = Color(0xFF312E5A),       // dark, faintly purple-tinted surface
-        HankBubbleText = Color(0xFFEDE9FE),   // very light purple text
+        HankBubble = Color(0xFF0F3D3A),       // dark teal-tinted surface
+        HankBubbleText = Color(0xFF99F6E4),   // teal-200 text
     )
 
 val LocalAppPalette = staticCompositionLocalOf { LightPalette }

@@ -78,7 +78,7 @@ object ChatSummaryPdf {
             val body = Paint().apply { color = 0xFF111827.toInt(); textSize = 10f }
             val muted = Paint(body).apply { color = 0xFF6B7280.toInt(); textSize = 9f }
             val userLbl = Paint(body).apply { color = 0xFF1D4ED8.toInt(); textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
-            val asstLbl = Paint(body).apply { color = 0xFF7C3AED.toInt(); textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+            val asstLbl = Paint(body).apply { color = 0xFF0D9488.toInt(); textSize = 9f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
 
             var pageNum = 1
             var page = doc.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, pageNum).create())

@@ -24,12 +24,12 @@ enum class Verbosity(val label: String) {
 /** Six avatar colour swatches the user can pick from on the Profile page. */
 val AvatarColors: List<Long> =
     listOf(
-        0xFF7C3AED, // purple — default brand
+        0xFF0D9488, // teal — default brand
+        0xFF111827, // graphite
         0xFF2563EB, // blue
         0xFF10B981, // emerald
         0xFFF59E0B, // amber
         0xFFEF4444, // red
-        0xFF111827, // graphite
     )
 
 data class UserProfile(
