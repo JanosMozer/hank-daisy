@@ -47,13 +47,17 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 @SuppressLint("AutoCloseableUse")
@@ -88,8 +92,18 @@ class StreamViewModel(
   private var speakingJob: Job? = null
   private var teardownJob: Job? = null
   private var analyzeJob: Job? = null
+  private var sceneJob: Job? = null
+  private var autonomousJob: Job? = null
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
+  @Volatile private var lastTurnAt: Long = 0L
+
+  private val sceneWatcher =
+      SceneChangeWatcher(
+          onSettledAfterMotion = {
+            viewModelScope.launch { autonomousObservation() }
+          },
+      )
 
   private val bargeInDetector =
       BargeInDetector(
@@ -182,7 +196,97 @@ class StreamViewModel(
     observeGlassesAudio()
     observeTtsSpeaking()
     startWakeWordListening()
+    startSceneWatcher()
     startStreamInternal()
+  }
+
+  /**
+   * Samples the live frame at ~3fps off the main thread and feeds the watcher.
+   * When the user moves the camera and then settles, autonomousObservation()
+   * fires.
+   */
+  private fun startSceneWatcher() {
+    sceneJob?.cancel()
+    sceneWatcher.reset()
+    sceneJob =
+        viewModelScope.launch(Dispatchers.Default) {
+          while (isActive) {
+            val frame = _uiState.value.videoFrame
+            if (frame != null && !frame.isRecycled) {
+              try {
+                sceneWatcher.observe(frame)
+              } catch (e: Exception) {
+                Log.w(TAG, "scene watcher observe failed", e)
+              }
+            }
+            delay(300L)
+          }
+        }
+  }
+
+  /**
+   * Triggered by SceneChangeWatcher when the user repositioned and the view
+   * settled. Sends the new frame + conversation history to Gemini with a
+   * "stay quiet unless meaningful" instruction so Hank only chimes in when
+   * something relevant changed (user did a step, repositioned where asked,
+   * a new issue is visible). Bypassed entirely when busy with another turn.
+   */
+  private suspend fun autonomousObservation() {
+    val frame = _uiState.value.videoFrame ?: return
+    if (frame.isRecycled) return
+    if (_uiState.value.isAnalyzing) return
+    if (_uiState.value.isListening) return
+    if (glassesAudio.isSpeaking.value) return
+    if (conversationHistory.isEmpty()) return  // only auto-comment mid-convo
+    if (System.currentTimeMillis() - lastTurnAt < 4_000L) return
+
+    val prompt =
+        "(System note: the user just moved the camera; the view has changed.) " +
+            "Look at this new frame. If something meaningful relative to our " +
+            "conversation is now visible — they completed a step, repositioned " +
+            "where you asked, or a new problem is visible — say ONE short " +
+            "sentence about it. If nothing meaningful changed, reply with just: <quiet>"
+
+    autonomousJob?.cancel()
+    autonomousJob =
+        viewModelScope.launch {
+          _uiState.update { it.copy(isAnalyzing = true) }
+          val frameCopy =
+              try {
+                frame.copy(frame.config ?: Bitmap.Config.ARGB_8888, true)
+              } catch (e: Exception) {
+                Log.w(TAG, "autonomous frame copy failed", e)
+                _uiState.update { it.copy(isAnalyzing = false) }
+                return@launch
+              }
+          try {
+            val response =
+                geminiService.analyzeFrame(frameCopy, prompt, conversationHistory.toList())
+            val cleaned = response.trim().lowercase()
+            _uiState.update { it.copy(isAnalyzing = false) }
+            if (cleaned.contains("<quiet>") ||
+                cleaned == "quiet" ||
+                cleaned.length < 6) {
+              Log.d(TAG, "Autonomous observation: Hank chose to stay quiet")
+              return@launch
+            }
+            // Append to conversation so subsequent user turns see this comment.
+            conversationHistory.add(GeminiService.Turn("assistant", response))
+            while (conversationHistory.size > 24) {
+              conversationHistory.removeAt(0)
+            }
+            _uiState.update { it.copy(lastGeminiResponse = response) }
+            glassesAudio.speak(response)
+            lastTurnAt = System.currentTimeMillis()
+          } catch (e: Exception) {
+            Log.e(TAG, "autonomousObservation failed", e)
+            _uiState.update { it.copy(isAnalyzing = false) }
+          } finally {
+            try {
+              frameCopy.recycle()
+            } catch (_: Exception) {}
+          }
+        }
   }
 
   private fun observeGlassesAudio() {
@@ -346,7 +450,13 @@ class StreamViewModel(
     try { bargeInDetector.stop() } catch (_: Exception) {}
     try { analyzeJob?.cancel() } catch (_: Exception) {}
     analyzeJob = null
+    try { sceneJob?.cancel() } catch (_: Exception) {}
+    sceneJob = null
+    try { autonomousJob?.cancel() } catch (_: Exception) {}
+    autonomousJob = null
+    sceneWatcher.reset()
     conversationHistory.clear()
+    lastTurnAt = 0L
     try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
     try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
 
@@ -474,6 +584,7 @@ class StreamViewModel(
 
           _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
           glassesAudio.speak(response)
+          lastTurnAt = System.currentTimeMillis()
           // Note: voiceCommand.startConversationFollowUp() is fired from the
           // isSpeaking=false transition in observeTtsSpeaking(), AFTER TTS
           // actually finishes — so we don't start listening over Hank's voice.
