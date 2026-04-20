@@ -17,6 +17,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -153,6 +154,34 @@ fun StreamScreen(
     // unified StatusPill above, since always-on listening and "Ready" state
     // are now communicated there.)
 
+    // Camera-context toggle — top-right. When off, Hank ignores the
+    // glasses view and only responds to what you say.
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(top = 460.dp, end = 12.dp)
+            .background(
+                if (streamUiState.cameraContextEnabled)
+                    Color(0xFF065F46).copy(alpha = 0.9f)
+                else
+                    Color(0xFF7C2D12).copy(alpha = 0.9f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable {
+                streamViewModel.setCameraContextEnabled(!streamUiState.cameraContextEnabled)
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+      Text(
+          text =
+              if (streamUiState.cameraContextEnabled) "\uD83D\uDC41 Uses camera"
+              else "\uD83D\uDCAC Voice only",
+          color = Color.White,
+          fontSize = 12.sp,
+          fontWeight = FontWeight.SemiBold,
+      )
+    }
+
     Box(modifier = Modifier.fillMaxSize().padding(all = 24.dp)) {
       Row(
           modifier =
@@ -166,7 +195,10 @@ fun StreamScreen(
         SwitchButton(
             label = stringResource(R.string.stop_stream_button_title),
             onClick = {
-              streamViewModel.stopStream()
+              // Do NOT stopStream() here. It wipes chatMessages before the
+              // DisposableEffect snapshot runs → session lost. Just navigate
+              // away; DisposableEffect captures the chat then stops the
+              // stream in the right order.
               wearablesViewModel.navigateToDeviceSelection()
             },
             isDestructive = true,

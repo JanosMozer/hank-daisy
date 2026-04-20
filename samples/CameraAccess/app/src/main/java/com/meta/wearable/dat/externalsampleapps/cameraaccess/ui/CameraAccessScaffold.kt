@@ -45,6 +45,9 @@ import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.session.SessionViewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.wearables.WearablesViewModel
 
+private fun initialsOf(name: String): String =
+    name.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraAccessScaffold(
@@ -87,6 +90,12 @@ fun CameraAccessScaffold(
             )
         !uiState.isRegistered ->
             HomeScreen(viewModel = viewModel)
+        sessionState.profileOpen ->
+            ProfileScreen(
+                profile = sessionState.userProfile,
+                onBack = { sessionVm.closeProfile() },
+                onSave = { sessionVm.updateProfile(it) },
+            )
         sessionState.viewingSessionId != null -> {
           val session =
               sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
@@ -100,16 +109,20 @@ fun CameraAccessScaffold(
             sessionVm.closeSession()
             SessionsHomeScreen(
                 sessions = sessionState.sessions,
+                userInitials = initialsOf(sessionState.userProfile.name),
                 onOpenSession = { sessionVm.openSession(it) },
                 onNewSession = { sessionVm.requestNewSession() },
+                onOpenProfile = { sessionVm.openProfile() },
             )
           }
         }
         else ->
             SessionsHomeScreen(
                 sessions = sessionState.sessions,
+                userInitials = initialsOf(sessionState.userProfile.name),
                 onOpenSession = { sessionVm.openSession(it) },
                 onNewSession = { sessionVm.requestNewSession() },
+                onOpenProfile = { sessionVm.openProfile() },
             )
       }
 

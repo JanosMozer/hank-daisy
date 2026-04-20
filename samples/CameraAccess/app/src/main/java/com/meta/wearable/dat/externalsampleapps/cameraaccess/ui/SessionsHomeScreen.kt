@@ -49,8 +49,10 @@ import java.util.Locale
 @Composable
 fun SessionsHomeScreen(
     sessions: List<Session>,
+    userInitials: String,
     onOpenSession: (String) -> Unit,
     onNewSession: () -> Unit,
+    onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -63,18 +65,41 @@ fun SessionsHomeScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(20.dp))
-            Text(
-                text = "Hank & Daisy",
-                color = AppColors.Accent,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = "Your conversations",
-                color = AppColors.TextSecondary,
-                fontSize = 13.sp,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Hank & Daisy",
+                        color = AppColors.Accent,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "Your conversations",
+                        color = AppColors.TextSecondary,
+                        fontSize = 13.sp,
+                    )
+                }
+                Box(
+                    modifier =
+                        Modifier
+                            .size(44.dp)
+                            .background(AppColors.Accent, shape = CircleShape)
+                            .clickable(onClick = onOpenProfile),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = userInitials.ifBlank { "?" },
+                        color = AppColors.AccentOn,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
             Spacer(Modifier.height(18.dp))
 
             if (sessions.isEmpty()) {

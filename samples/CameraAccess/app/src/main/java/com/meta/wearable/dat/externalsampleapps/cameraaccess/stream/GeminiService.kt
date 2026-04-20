@@ -72,7 +72,7 @@ You're being interrupted often — that's normal. Pick up the thread."""
     }
 
     suspend fun analyzeFrame(
-        bitmap: Bitmap,
+        bitmap: Bitmap?,
         userQuestion: String =
             "What do you see? Identify any problems and walk me through fixing them.",
         history: List<Turn> = emptyList(),
@@ -83,7 +83,7 @@ You're being interrupted often — that's normal. Pick up the thread."""
 
         return withContext(Dispatchers.IO) {
             try {
-                val imageDataUrl = bitmapToDataUrl(bitmap)
+                val imageDataUrl = bitmap?.let { bitmapToDataUrl(it) }
 
                 val messages =
                     JSONArray().apply {
@@ -115,15 +115,17 @@ You're being interrupted often — that's normal. Pick up the thread."""
                                                 put("text", userQuestion)
                                             },
                                         )
-                                        put(
-                                            JSONObject().apply {
-                                                put("type", "image_url")
-                                                put(
-                                                    "image_url",
-                                                    JSONObject().apply { put("url", imageDataUrl) },
-                                                )
-                                            },
-                                        )
+                                        if (imageDataUrl != null) {
+                                            put(
+                                                JSONObject().apply {
+                                                    put("type", "image_url")
+                                                    put(
+                                                        "image_url",
+                                                        JSONObject().apply { put("url", imageDataUrl) },
+                                                    )
+                                                },
+                                            )
+                                        }
                                     },
                                 )
                             },

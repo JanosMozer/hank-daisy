@@ -256,6 +256,9 @@ class StreamViewModel(
    * a new issue is visible). Bypassed entirely when busy with another turn.
    */
   private suspend fun autonomousObservation() {
+    // When the user's in "discussion only" mode, don't let Hank chime in
+    // about what he sees — only respond when directly addressed.
+    if (!_uiState.value.cameraContextEnabled) return
     val frame = _uiState.value.videoFrame ?: return
     if (frame.isRecycled) return
     if (_uiState.value.isAnalyzing) return
@@ -578,6 +581,10 @@ class StreamViewModel(
   }
 
 
+  fun setCameraContextEnabled(enabled: Boolean) {
+    _uiState.update { it.copy(cameraContextEnabled = enabled) }
+  }
+
   /** Manual Ask Hank — skips wake word, goes straight to listening for question. */
   fun askHank() {
     if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
@@ -599,18 +606,26 @@ class StreamViewModel(
   }
 
   private fun analyzeWithQuestion(question: String) {
-    val currentFrame = _uiState.value.videoFrame ?: return
     if (_uiState.value.isAnalyzing) return
+    val useFrame = _uiState.value.cameraContextEnabled
+    val currentFrame = _uiState.value.videoFrame
+    // If the user disabled camera context, we talk to Hank with no image —
+    // this path also lets them keep chatting even if the glasses dropped.
+    // Only bail if we genuinely have nothing to say AND nothing visual.
+    if (useFrame && currentFrame == null) return
 
     _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
 
     analyzeJob?.cancel()
     analyzeJob =
         viewModelScope.launch {
-          val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
+          val frameCopy =
+              if (useFrame && currentFrame != null)
+                  currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
+              else null
           val historySnapshot = conversationHistory.toList()
           val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
-          frameCopy.recycle()
+          frameCopy?.recycle()
 
           conversationHistory.add(GeminiService.Turn("user", question))
           conversationHistory.add(GeminiService.Turn("assistant", response))
