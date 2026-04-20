@@ -256,9 +256,6 @@ class StreamViewModel(
    * a new issue is visible). Bypassed entirely when busy with another turn.
    */
   private suspend fun autonomousObservation() {
-    // When the user's in "discussion only" mode, don't let Hank chime in
-    // about what he sees — only respond when directly addressed.
-    if (!_uiState.value.cameraContextEnabled) return
     val frame = _uiState.value.videoFrame ?: return
     if (frame.isRecycled) return
     if (_uiState.value.isAnalyzing) return
@@ -268,18 +265,19 @@ class StreamViewModel(
     if (System.currentTimeMillis() - lastTurnAt < 4_000L) return
 
     val prompt =
-        "(System note: the camera moved; here's the new view.) Consider the most " +
-            "recent step you gave in our conversation. " +
-            "1) If the user has VISIBLY completed that step, give them the NEXT " +
-            "single step now (one sentence, then stop). " +
-            "2) If they repositioned where you asked but the step isn't done " +
+        "(System note: the camera moved; here's the new view.) React ONLY if " +
+            "it's directly relevant to the conversation so far. " +
+            "1) If the current conversation is NOT about something automotive or " +
+            "what's visible, or the new view is unrelated (a wall, a person, a " +
+            "room, background) — reply with just: <quiet>. Do not describe the " +
+            "scene unprompted. " +
+            "2) If the user has VISIBLY completed the step you just gave them, " +
+            "give the NEXT single step now (one sentence, then stop). " +
+            "3) If they repositioned where you asked but the step isn't done " +
             "yet, say one short sentence to acknowledge or guide them. " +
-            "3) If something concerning is visible (new problem, danger), say " +
-            "one short sentence about it. " +
-            "4) Otherwise — including if the previous step is not yet done — " +
-            "reply with just: <quiet>. Do NOT repeat or summarise. Do NOT " +
-            "advance to the next step unless you see evidence the previous " +
-            "one is done."
+            "4) If something genuinely concerning is visible (new problem, " +
+            "danger), say one short sentence about it. " +
+            "5) Otherwise — reply with just: <quiet>."
 
     autonomousJob?.cancel()
     autonomousJob =
@@ -581,10 +579,6 @@ class StreamViewModel(
   }
 
 
-  fun setCameraContextEnabled(enabled: Boolean) {
-    _uiState.update { it.copy(cameraContextEnabled = enabled) }
-  }
-
   /** Manual Ask Hank — skips wake word, goes straight to listening for question. */
   fun askHank() {
     if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
@@ -607,22 +601,16 @@ class StreamViewModel(
 
   private fun analyzeWithQuestion(question: String) {
     if (_uiState.value.isAnalyzing) return
-    val useFrame = _uiState.value.cameraContextEnabled
     val currentFrame = _uiState.value.videoFrame
-    // If the user disabled camera context, we talk to Hank with no image —
-    // this path also lets them keep chatting even if the glasses dropped.
-    // Only bail if we genuinely have nothing to say AND nothing visual.
-    if (useFrame && currentFrame == null) return
-
     _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
 
     analyzeJob?.cancel()
     analyzeJob =
         viewModelScope.launch {
+          // Always send the frame when we have one; the system prompt tells
+          // Hank to ignore it if the question / scene is unrelated.
           val frameCopy =
-              if (useFrame && currentFrame != null)
-                  currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
-              else null
+              currentFrame?.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
           val historySnapshot = conversationHistory.toList()
           val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
           frameCopy?.recycle()

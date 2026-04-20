@@ -26,9 +26,6 @@ data class StreamUiState(
     val isListening: Boolean = false,
     val isWakeWordActive: Boolean = false,
     val isHankSpeaking: Boolean = false,
-    /** When false, Hank answers purely from voice+history and ignores the
-     * glasses camera frames — for a plain conversation without vision. */
-    val cameraContextEnabled: Boolean = true,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
     val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,
