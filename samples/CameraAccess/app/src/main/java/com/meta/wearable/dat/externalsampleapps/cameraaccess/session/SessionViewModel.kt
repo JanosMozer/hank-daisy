@@ -29,6 +29,8 @@ data class SessionsUiState(
     val settings: AppSettings = AppSettings(),
     val splashShown: Boolean = false,
     val streamRequested: Boolean = false,
+    /** True when the user wants the camera-free Chat-only screen. */
+    val chatOnlyOpen: Boolean = false,
     val viewingSessionId: String? = null,
     val profileOpen: Boolean = false,
     val currentTab: com.meta.wearable.dat.externalsampleapps.cameraaccess.ui.AppTab =
@@ -100,6 +102,9 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
 
     fun requestNewSession() = _uiState.update { it.copy(streamRequested = true) }
     fun clearStreamRequest() = _uiState.update { it.copy(streamRequested = false) }
+
+    fun openChatOnly() = _uiState.update { it.copy(chatOnlyOpen = true) }
+    fun closeChatOnly() = _uiState.update { it.copy(chatOnlyOpen = false) }
 
     fun openSession(id: String) = _uiState.update { it.copy(viewingSessionId = id) }
     fun closeSession() = _uiState.update { it.copy(viewingSessionId = null) }

@@ -132,6 +132,11 @@ fun CameraAccessScaffold(
                   wearablesViewModel = viewModel,
                   onSessionEnd = { sessionVm.saveStreamSession(it) },
               )
+          sessionState.chatOnlyOpen ->
+              ChatOnlyScreen(
+                  onBack = { sessionVm.closeChatOnly() },
+                  onSessionEnd = { sessionVm.saveStreamSession(it) },
+              )
           !uiState.isRegistered ->
               HomeScreen(viewModel = viewModel)
           sessionState.profileOpen ->
@@ -237,6 +242,7 @@ private fun MainTabs(
                 userInitials = initialsOf(state.userProfile.name),
                 onOpenSession = { sessionVm.openSession(it) },
                 onNewSession = { sessionVm.requestNewSession() },
+                onNewChatOnly = { sessionVm.openChatOnly() },
                 onOpenProfile = onOpenProfile,
             )
         AppTab.TIPS -> TipsScreen()

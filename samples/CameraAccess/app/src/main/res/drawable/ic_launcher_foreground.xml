@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Wraps the user-supplied "Hank & Daisy" PNG (ic_launcher_logo.png) with
+    insets so the artwork sits inside the adaptive-icon safe zone (centre
+    66dp of the 108dp viewport). Without this, launcher masks (circle /
+    squircle) clip the wordmark at the edges.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_launcher_logo"
+    android:inset="22dp" />

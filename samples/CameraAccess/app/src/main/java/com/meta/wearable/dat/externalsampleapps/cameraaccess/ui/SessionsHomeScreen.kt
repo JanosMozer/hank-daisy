@@ -52,6 +52,7 @@ fun SessionsHomeScreen(
     userInitials: String,
     onOpenSession: (String) -> Unit,
     onNewSession: () -> Unit,
+    onNewChatOnly: () -> Unit,
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -134,23 +135,41 @@ fun SessionsHomeScreen(
             }
         }
 
-        // Floating "+" button — bottom-right.
-        Box(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
-                    .size(64.dp)
-                    .background(AppColors.Accent, shape = CircleShape)
-                    .clickable(onClick = onNewSession),
-            contentAlignment = Alignment.Center,
+        // Two FABs in a column, bottom-right. Top: glasses-free chat;
+        // bottom (primary): "+" new stream session with glasses.
+        Column(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End,
         ) {
-            Text(
-                text = "+",
-                color = AppColors.AccentOn,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Box(
+                modifier =
+                    Modifier
+                        .size(52.dp)
+                        .background(AppColors.Surface, shape = CircleShape)
+                        .clickable(onClick = onNewChatOnly),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "\uD83D\uDCAC",
+                    fontSize = 22.sp,
+                )
+            }
+            Box(
+                modifier =
+                    Modifier
+                        .size(64.dp)
+                        .background(AppColors.Accent, shape = CircleShape)
+                        .clickable(onClick = onNewSession),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "+",
+                    color = AppColors.AccentOn,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
