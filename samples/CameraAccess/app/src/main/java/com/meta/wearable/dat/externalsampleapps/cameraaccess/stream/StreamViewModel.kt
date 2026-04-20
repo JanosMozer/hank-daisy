@@ -89,6 +89,20 @@ class StreamViewModel(
   private var teardownJob: Job? = null
   private var analyzeJob: Job? = null
 
+  private val conversationHistory = mutableListOf<GeminiService.Turn>()
+
+  private val bargeInDetector =
+      BargeInDetector(
+          onUserSpeaking = {
+            // Posted from a worker thread — bounce to main + viewModelScope.
+            viewModelScope.launch {
+              Log.d(TAG, "Barge-in detected — cutting Hank off")
+              glassesAudio.stopSpeaking()
+              voiceCommand.startConversationFollowUp()
+            }
+          },
+      )
+
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
 
@@ -186,7 +200,20 @@ class StreamViewModel(
     speakingJob =
         viewModelScope.launch {
           glassesAudio.isSpeaking.collect { speaking ->
+            // Mute the recognizer (it can't echo-cancel Hank's own voice) and
+            // hand the mic to BargeInDetector, which CAN (via AEC).
             voiceCommand.setMuted(speaking)
+            if (speaking) {
+              bargeInDetector.start()
+            } else {
+              bargeInDetector.stop()
+              // After Hank finishes speaking naturally, auto-listen for a
+              // follow-up turn so the conversation flows without needing
+              // "Hey Hank" again.
+              if (conversationHistory.isNotEmpty()) {
+                voiceCommand.startConversationFollowUp()
+              }
+            }
           }
         }
   }
@@ -309,8 +336,10 @@ class StreamViewModel(
     try { speakingJob?.cancel() } catch (_: Exception) {}
     speakingJob = null
     try { glassesAudio.stopSpeaking() } catch (_: Exception) {}
+    try { bargeInDetector.stop() } catch (_: Exception) {}
     try { analyzeJob?.cancel() } catch (_: Exception) {}
     analyzeJob = null
+    conversationHistory.clear()
     try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
     try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
 
@@ -420,16 +449,28 @@ class StreamViewModel(
     _uiState.update { it.copy(isAnalyzing = true, lastGeminiResponse = null) }
 
     analyzeJob?.cancel()
-    analyzeJob = viewModelScope.launch {
-      val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
-      val response = geminiService.analyzeFrame(frameCopy, question)
-      _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
-      glassesAudio.speak(response)
-      frameCopy.recycle()
+    analyzeJob =
+        viewModelScope.launch {
+          val frameCopy = currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
+          // Snapshot the conversation so far; new turn appended below on success.
+          val historySnapshot = conversationHistory.toList()
+          val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
+          frameCopy.recycle()
 
-      // Resume wake word listening after response
-      voiceCommand.onQuestionHandled()
-    }
+          // Append both sides of the turn to history so Hank remembers it.
+          conversationHistory.add(GeminiService.Turn("user", question))
+          conversationHistory.add(GeminiService.Turn("assistant", response))
+          // Trim if it gets unwieldy — keep last 12 turns (~6 exchanges).
+          while (conversationHistory.size > 12) {
+            conversationHistory.removeAt(0)
+          }
+
+          _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
+          glassesAudio.speak(response)
+          // Note: voiceCommand.startConversationFollowUp() is fired from the
+          // isSpeaking=false transition in observeTtsSpeaking(), AFTER TTS
+          // actually finishes — so we don't start listening over Hank's voice.
+        }
   }
 
   fun cancelListening() {

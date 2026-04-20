@@ -93,6 +93,21 @@ class VoiceCommandManager(private val context: Context) {
         restartRecognizer()
     }
 
+    /**
+     * Hank just finished speaking — auto-listen for a follow-up turn without
+     * requiring "Hey Hank" again. Lets the conversation flow naturally.
+     */
+    fun startConversationFollowUp() {
+        if (!isRunning && !isFollowUp) {
+            // we were stopped entirely — nothing to do
+            return
+        }
+        isMuted = false
+        isFollowUp = true
+        _state.value = VoiceState.Listening
+        restartRecognizer()
+    }
+
     /** Reset state after question has been processed. */
     fun onQuestionHandled() {
         _state.value = VoiceState.Passive

@@ -36,27 +36,23 @@ class GeminiService {
 
         private const val MODEL = "google/gemini-3.1-flash-lite-preview"
 
-        private const val SYSTEM_PROMPT = """You are Hank, an expert automotive diagnostic assistant built into smart glasses worn by mechanics and car owners. You see exactly what they see through the glasses camera.
+        private const val SYSTEM_PROMPT = """You are Hank — a friendly, sharp mechanic talking to someone wearing smart glasses. You see exactly what they see, in real time. You're having a CONVERSATION, not delivering a manual.
 
-Your role:
-1. IDENTIFY what the camera is showing (engine component, dashboard warning, fluid leak, tire, belt, wiring, exhaust, suspension, brakes, etc.)
-2. DIAGNOSE the problem — be specific about what's wrong
-3. GIVE A STEP-BY-STEP FIX — numbered steps the mechanic can follow while wearing the glasses
+Voice rules (this is critical — your replies are spoken aloud through their glasses):
+- Keep replies SHORT. Usually 1–3 sentences. NEVER more than 4.
+- One step at a time. After each instruction, STOP and wait for them to do it.
+- After giving a step, end with something like "let me know when you're there", "tell me when it's off", or "say go when you're ready".
+- If you can't see clearly, say so plainly and ask them to move closer / change angle / shine a light. Don't speculate.
+- If they tell you they've done something, look at the new view and react to what's actually different.
+- Talk like a buddy in the shop — warm, direct, a little casual. No bullet points, no markdown, no numbered lists. Just talk.
+- If something is dangerous, lead with the warning in one short sentence.
+- If the camera moves and you see something new mid-conversation, acknowledge it ("oh wait, I can see now...").
+- If you genuinely don't understand the question, ask one clarifying question. Don't guess.
 
-Response format:
-• Start with a one-line summary of what you see and the problem
-• Then give numbered steps to fix it
-• End with a safety note if applicable
-
-Style rules:
-- Talk like an experienced mechanic, not a textbook
-- Be direct and confident
-- If you see a dashboard warning light, name it and explain what it means
-- If you see a fluid leak, identify the fluid by color and likely source
-- Rate severity: MINOR / MODERATE / CRITICAL
-- If you genuinely can't tell what's wrong, say so and suggest what to inspect closer
-- SAFETY FIRST — if something is dangerous, lead with that warning"""
+You're being interrupted often — that's normal. Pick up the thread."""
     }
+
+    data class Turn(val role: String, val text: String)
 
     private val apiKey: String = BuildConfig.OPENROUTER_API_KEY
 
@@ -77,7 +73,8 @@ Style rules:
     suspend fun analyzeFrame(
         bitmap: Bitmap,
         userQuestion: String =
-            "What do you see? Identify any problems and tell me how to fix them step by step.",
+            "What do you see? Identify any problems and walk me through fixing them.",
+        history: List<Turn> = emptyList(),
     ): String {
         if (apiKey.isBlank()) {
             return "OpenRouter API key not configured. Add openrouter_api_key to local.properties."
@@ -87,50 +84,58 @@ Style rules:
             try {
                 val imageDataUrl = bitmapToDataUrl(bitmap)
 
+                val messages =
+                    JSONArray().apply {
+                        put(
+                            JSONObject().apply {
+                                put("role", "system")
+                                put("content", SYSTEM_PROMPT)
+                            },
+                        )
+                        // Prior turns — text only. Old frames are stale; always attach
+                        // the live frame to the *current* user turn below.
+                        history.forEach { turn ->
+                            put(
+                                JSONObject().apply {
+                                    put("role", turn.role)
+                                    put("content", turn.text)
+                                },
+                            )
+                        }
+                        put(
+                            JSONObject().apply {
+                                put("role", "user")
+                                put(
+                                    "content",
+                                    JSONArray().apply {
+                                        put(
+                                            JSONObject().apply {
+                                                put("type", "text")
+                                                put("text", userQuestion)
+                                            },
+                                        )
+                                        put(
+                                            JSONObject().apply {
+                                                put("type", "image_url")
+                                                put(
+                                                    "image_url",
+                                                    JSONObject().apply { put("url", imageDataUrl) },
+                                                )
+                                            },
+                                        )
+                                    },
+                                )
+                            },
+                        )
+                    }
+
                 val requestBody =
                     JSONObject()
                         .apply {
                             put("model", MODEL)
-                            put(
-                                "messages",
-                                JSONArray().apply {
-                                    put(
-                                        JSONObject().apply {
-                                            put("role", "system")
-                                            put("content", SYSTEM_PROMPT)
-                                        },
-                                    )
-                                    put(
-                                        JSONObject().apply {
-                                            put("role", "user")
-                                            put(
-                                                "content",
-                                                JSONArray().apply {
-                                                    put(
-                                                        JSONObject().apply {
-                                                            put("type", "text")
-                                                            put("text", userQuestion)
-                                                        },
-                                                    )
-                                                    put(
-                                                        JSONObject().apply {
-                                                            put("type", "image_url")
-                                                            put(
-                                                                "image_url",
-                                                                JSONObject().apply {
-                                                                    put("url", imageDataUrl)
-                                                                },
-                                                            )
-                                                        },
-                                                    )
-                                                },
-                                            )
-                                        },
-                                    )
-                                },
-                            )
-                            put("max_tokens", 800)
-                            put("temperature", 0.4)
+                            put("messages", messages)
+                            put("max_tokens", 400)
+                            put("temperature", 0.6)
                         }
                         .toString()
 
