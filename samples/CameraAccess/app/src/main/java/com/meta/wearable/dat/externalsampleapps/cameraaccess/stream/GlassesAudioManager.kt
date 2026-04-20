@@ -19,6 +19,7 @@ import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import com.meta.wearable.dat.externalsampleapps.cameraaccess.BuildConfig
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +63,14 @@ class GlassesAudioManager(private val context: Context) {
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    private val elevenLabs =
+        ElevenLabsTtsService(
+            context = context,
+            voiceId = BuildConfig.ELEVENLABS_VOICE_ID,
+            apiKey = BuildConfig.ELEVENLABS_API_KEY,
+            onSpeakingChanged = { speaking -> _isSpeaking.value = speaking },
+        )
 
     private var scoActive = false
 
@@ -133,8 +142,11 @@ class GlassesAudioManager(private val context: Context) {
         refreshStatus()
     }
 
-    /** Cut off the current TTS utterance immediately. */
+    /** Cut off the current utterance immediately, on whichever TTS backend is active. */
     fun stopSpeaking() {
+        try {
+            elevenLabs.stop()
+        } catch (_: Exception) {}
         try {
             tts?.stop()
         } catch (_: Exception) {}
@@ -143,16 +155,28 @@ class GlassesAudioManager(private val context: Context) {
 
     /**
      * Speak the reply through the glasses (A2DP) if connected, else through the
-     * phone. Splits long text into sentence-sized chunks queued individually so
-     * stopSpeaking() can cut Hank off within one chunk's audio buffer (~one
-     * sentence) rather than waiting for the whole reply to finish.
+     * phone. Tries ElevenLabs (high-quality voice) first; falls back to Android
+     * TTS if ElevenLabs isn't configured or its first sentence fails.
+     *
+     * Splits long text into sentence-sized chunks so stopSpeaking() can cut
+     * Hank off within ~one sentence rather than waiting for the whole reply.
      */
     fun speak(text: String) {
-        if (!ttsReady) {
-            Log.w(TAG, "TTS not ready")
+        val chunks = splitForTts(text)
+        if (chunks.isEmpty()) return
+        val a2dp = findA2dpDevice()
+        Log.d(
+            TAG,
+            "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"} (${chunks.size} chunks)",
+        )
+        if (elevenLabs.isConfigured && elevenLabs.speak(chunks)) {
             return
         }
-        val a2dp = findA2dpDevice()
+        // Fallback: Android TTS
+        if (!ttsReady) {
+            Log.w(TAG, "ElevenLabs unavailable and Android TTS not ready — dropping reply")
+            return
+        }
         if (a2dp != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             tts?.setAudioAttributes(
                 AudioAttributes.Builder()
@@ -161,13 +185,10 @@ class GlassesAudioManager(private val context: Context) {
                     .build(),
             )
         }
-        val chunks = splitForTts(text)
-        if (chunks.isEmpty()) return
         tts?.speak(chunks.first(), TextToSpeech.QUEUE_FLUSH, null, "hank_${System.currentTimeMillis()}_0")
         for ((i, chunk) in chunks.withIndex().drop(1)) {
             tts?.speak(chunk, TextToSpeech.QUEUE_ADD, null, "hank_${System.currentTimeMillis()}_$i")
         }
-        Log.d(TAG, "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"} (${chunks.size} chunks)")
     }
 
     /** Split a reply on sentence boundaries so each chunk is short enough that
@@ -231,6 +252,9 @@ class GlassesAudioManager(private val context: Context) {
     }
 
     fun shutdown() {
+        try {
+            elevenLabs.shutdown()
+        } catch (_: Exception) {}
         try {
             tts?.stop()
             tts?.shutdown()

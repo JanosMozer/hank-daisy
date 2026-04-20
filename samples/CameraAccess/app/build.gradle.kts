@@ -46,6 +46,16 @@ android {
         "OPENROUTER_API_KEY",
         "\"${localProps.getProperty("openrouter_api_key", "")}\"",
     )
+    buildConfigField(
+        "String",
+        "ELEVENLABS_API_KEY",
+        "\"${localProps.getProperty("elevenlabs_api_key", "")}\"",
+    )
+    buildConfigField(
+        "String",
+        "ELEVENLABS_VOICE_ID",
+        "\"${localProps.getProperty("elevenlabs_voice_id", "")}\"",
+    )
   }
 
   buildTypes {
