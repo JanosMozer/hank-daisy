@@ -23,55 +23,32 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 
 /**
  * Landing tab for starting a live, glasses-mediated conversation.
  * Minimal UI: a hero block explaining what this is, then a prominent
- * purple "+" FAB anchored at the bottom-center to start the call.
+ * purple "+" FAB anchored at the bottom-center. Tapping the FAB fires
+ * onNewSession — the scaffold then calls navigateToStreaming, which
+ * flips isStreaming=true and routes the whole screen to StreamScreen
+ * (where the glasses camera feed renders).
+ *
+ * isStreaming is accepted as a parameter purely so the button can
+ * render its pressed/active state while the transition is in flight;
+ * it's not used to gate anything else on this screen.
  */
 @Composable
 fun ConvosScreen(
     onNewSession: () -> Unit,
-    /** True once navigateToStreaming has set isStreaming=true. If it stays
-     * false for too long after a tap, we surface an error so the user
-     * knows the stream never actually kicked off. */
     isStreaming: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    var starting by remember { mutableStateOf(false) }
-    var timedOut by remember { mutableStateOf(false) }
-
-    // If the scaffold flips to streaming, the whole screen swaps to
-    // StreamScreen; this state just resets so the overlay is gone on return.
-    LaunchedEffect(isStreaming) {
-        if (isStreaming) {
-            starting = false
-            timedOut = false
-        }
-    }
-    // Timeout: if starting is still true 8s after a tap, assume the stream
-    // never kicked off (glasses not paired, permission revoked, etc.).
-    LaunchedEffect(starting) {
-        if (starting) {
-            timedOut = false
-            delay(8_000)
-            if (starting) timedOut = true
-        }
-    }
     Box(
         modifier =
             modifier
@@ -81,7 +58,11 @@ fun ConvosScreen(
                 .navigationBarsPadding(),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 32.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 32.dp),
         ) {
             Text(
                 text = "Convos",
@@ -100,10 +81,7 @@ fun ConvosScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .background(
-                            AppColors.Surface,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                        )
+                        .background(AppColors.Surface, shape = RoundedCornerShape(14.dp))
                         .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -124,8 +102,9 @@ fun ConvosScreen(
                 )
                 Text(
                     text =
-                        "Past conversations show up under the Chats tab. To talk to " +
-                            "Hank without the glasses, use the Chats tab's + button.",
+                        "Make sure the glasses are unfolded and paired in the Meta AI " +
+                            "app. If nothing happens, an error will pop up at the " +
+                            "bottom of the screen with what to fix.",
                     color = AppColors.TextMuted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
@@ -133,7 +112,7 @@ fun ConvosScreen(
             }
         }
 
-        // Prominent purple + at the bottom-center
+        // Purple "+" at the bottom-center — direct, no UI mask-off.
         Box(
             modifier =
                 Modifier
@@ -141,75 +120,15 @@ fun ConvosScreen(
                     .padding(bottom = 28.dp)
                     .size(72.dp)
                     .background(AppColors.Accent, shape = CircleShape)
-                    .clickable(enabled = !starting) {
-                        starting = true
-                        timedOut = false
-                        onNewSession()
-                    },
+                    .clickable(onClick = onNewSession),
             contentAlignment = Alignment.Center,
         ) {
-            if (starting) {
-                CircularProgressIndicator(
-                    color = AppColors.AccentOn,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(28.dp),
-                )
-            } else {
-                Text(
-                    text = "+",
-                    color = AppColors.AccentOn,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-
-        // "Starting camera…" pill above the button while we wait for DAT.
-        if (starting && !timedOut) {
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 116.dp)
-                        .background(
-                            AppColors.Surface,
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    text = "Starting camera…",
-                    color = AppColors.TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-
-        // After ~8s with no stream, surface a practical message so the user
-        // isn't stuck staring at a spinner.
-        if (timedOut) {
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 116.dp, start = 24.dp, end = 24.dp)
-                        .background(
-                            androidx.compose.ui.graphics.Color(0xFFB91C1C),
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Text(
-                    text =
-                        "Couldn't start the glasses stream. Check that your Ray-Ban Meta is " +
-                            "paired in the Meta AI app and Camera permission is granted, then " +
-                            "tap + again.",
-                    color = androidx.compose.ui.graphics.Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
+            Text(
+                text = "+",
+                color = AppColors.AccentOn,
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

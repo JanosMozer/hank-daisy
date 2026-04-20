@@ -166,7 +166,7 @@ class WearablesViewModel(application: Application) : AndroidViewModel(applicatio
     _uiState.update { it.copy(recentError = null) }
   }
 
-  private fun setRecentError(error: String) {
+  internal fun setRecentError(error: String) {
     _uiState.update { it.copy(recentError = error) }
   }
 

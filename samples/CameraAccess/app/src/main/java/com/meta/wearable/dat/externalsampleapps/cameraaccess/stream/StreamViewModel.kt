@@ -211,15 +211,31 @@ class StreamViewModel(
                 session?.start()
               } catch (e: Exception) {
                 Log.e(TAG, "session?.start() failed", e)
+                wearablesViewModel.setRecentError(
+                    "Couldn't start the glasses session: ${e.message ?: "unknown"}. " +
+                        "Unfold the glasses and try again.",
+                )
               }
             }
             .onFailure { error, _ ->
               Log.e(TAG, "Failed to create session: ${error.description}")
+              wearablesViewModel.setRecentError(
+                  "Couldn't reach the glasses: ${error.description}. " +
+                      "Check they're unfolded and connected in the Meta AI app.",
+              )
             }
       } catch (e: Exception) {
         Log.e(TAG, "createSession threw", e)
+        wearablesViewModel.setRecentError(
+            "Glasses session error: ${e.message ?: "unknown"}",
+        )
       }
-      if (session == null) return
+      if (session == null) {
+        // Bail back to Convos/home so the user can retry instead of being
+        // stranded on an empty StreamScreen.
+        wearablesViewModel.navigateToDeviceSelection()
+        return
+      }
     }
     try {
       liveStreamServer.start()
