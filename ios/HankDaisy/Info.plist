@@ -64,6 +64,11 @@
 	<!-- Microphone Permission -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone to listen for commands and record your questions for Hank.</string>
+	
+	<!-- Speech Recognition Permission -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>We need speech recognition to transcribe your voice commands.</string>
+
 
 	<!-- Bluetooth Permission -->
 	<key>NSBluetoothAlwaysUsageDescription</key>
