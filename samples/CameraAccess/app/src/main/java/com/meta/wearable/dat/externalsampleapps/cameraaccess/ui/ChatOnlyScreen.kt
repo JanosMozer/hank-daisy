@@ -8,6 +8,8 @@
 
 package com.meta.wearable.dat.externalsampleapps.cameraaccess.ui
 
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,9 +41,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -58,15 +65,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.chat.ChatOnlyViewModel
 import com.meta.wearable.dat.externalsampleapps.cameraaccess.stream.ChatMessage
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -88,6 +98,8 @@ fun ChatOnlyScreen(
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
+    val context = LocalContext.current
+
     // System photo picker — works on Android 13+ natively, back-compat
     // on older versions via Play Services. No storage permission needed.
     val pickImage =
@@ -95,6 +107,61 @@ fun ChatOnlyScreen(
             contract = ActivityResultContracts.PickVisualMedia(),
             onResult = { uri -> if (uri != null) vm.attachImage(uri) },
         )
+
+    // Camera capture — writes to a temp JPEG in cacheDir whose URI we
+    // hand to the camera app via FileProvider. We hold the URI in
+    // `captureUri` so the result handler can re-read it after the user
+    // returns from the camera. No CAMERA permission needed because the
+    // intent delegates capture to a system camera app.
+    val captureUri = remember { mutableStateOf<Uri?>(null) }
+    val takePhoto =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.TakePicture(),
+            onResult = { success ->
+                if (success) captureUri.value?.let { uri -> vm.attachImage(uri) }
+            },
+        )
+
+    // Generic file picker. We accept any mime so the user can pick PDFs,
+    // CSVs, etc., but Hank only sees images today — anything else gets
+    // a Toast nudge instead of a silent no-op.
+    val pickFile =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent(),
+            onResult = { uri ->
+                if (uri == null) return@rememberLauncherForActivityResult
+                val mime = context.contentResolver.getType(uri)
+                if (mime?.startsWith("image/") == true) {
+                    vm.attachImage(uri)
+                } else {
+                    Toast.makeText(
+                            context,
+                            "Only images can be sent to Hank right now.",
+                            Toast.LENGTH_SHORT,
+                        )
+                        .show()
+                }
+            },
+        )
+
+    var attachMenuOpen by remember { mutableStateOf(false) }
+
+    // Spawn a fresh capture URI + launch the camera app. The file MUST
+    // live under one of the directories declared in res/xml/file_paths
+    // so FileProvider can serve it back to the camera app — `images/` is
+    // the existing cache-path entry, so we land captures there.
+    fun launchCamera() {
+        val dir = File(context.cacheDir, "images").apply { mkdirs() }
+        val file = File(dir, "camera_${System.currentTimeMillis()}.jpg")
+        val uri =
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file,
+            )
+        captureUri.value = uri
+        takePhoto.launch(uri)
+    }
 
     DisposableEffect(Unit) {
         vm.start()
@@ -273,20 +340,71 @@ fun ChatOnlyScreen(
 
             val canSend = input.isNotBlank() || attached != null
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Attach image — left of the text field so it reads like
-                // "add something, then type", matching most chat UIs.
-                IconButton(
-                    icon = Icons.Outlined.Image,
-                    contentDescription = "Attach image",
-                    highlighted = attached != null,
-                    onClick = {
-                        pickImage.launch(
-                            PickVisualMediaRequest(
-                                ActivityResultContracts.PickVisualMedia.ImageOnly,
-                            ),
+                // + opens a popover above the button with three ways to
+                // attach: take a photo, pick from the gallery, pick a
+                // generic file. Box anchors the DropdownMenu directly
+                // above the IconButton.
+                Box {
+                    IconButton(
+                        icon = Icons.Outlined.Add,
+                        contentDescription = "Attach",
+                        highlighted = attachMenuOpen || attached != null,
+                        onClick = { attachMenuOpen = true },
+                    )
+                    DropdownMenu(
+                        expanded = attachMenuOpen,
+                        onDismissRequest = { attachMenuOpen = false },
+                        modifier =
+                            Modifier.background(AppColors.Surface),
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Take photo", color = AppColors.TextPrimary) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.PhotoCamera,
+                                    contentDescription = null,
+                                    tint = AppColors.Accent,
+                                )
+                            },
+                            onClick = {
+                                attachMenuOpen = false
+                                launchCamera()
+                            },
                         )
-                    },
-                )
+                        DropdownMenuItem(
+                            text = { Text("Upload image", color = AppColors.TextPrimary) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Image,
+                                    contentDescription = null,
+                                    tint = AppColors.Accent,
+                                )
+                            },
+                            onClick = {
+                                attachMenuOpen = false
+                                pickImage.launch(
+                                    PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                    ),
+                                )
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Upload file", color = AppColors.TextPrimary) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.AttachFile,
+                                    contentDescription = null,
+                                    tint = AppColors.Accent,
+                                )
+                            },
+                            onClick = {
+                                attachMenuOpen = false
+                                pickFile.launch("*/*")
+                            },
+                        )
+                    }
+                }
                 Spacer(Modifier.width(6.dp))
                 OutlinedTextField(
                     value = input,
