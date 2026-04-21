@@ -61,6 +61,25 @@
 		<string>processing</string>
 	</array>
 
+	<key>MWDAT.AppLinkURLScheme</key>
+	<string>hankdaisy</string>
+	<key>MWDAT.MetaAppID</key>
+	<string></string>
+	<key>MWDAT.TeamID</key>
+	<string>VDT297FLZ9</string>
+
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.meta.wearable.hankdaisy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hankdaisy</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- Microphone Permission -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need access to your microphone to listen for commands and record your questions for Hank.</string>
@@ -76,11 +95,11 @@
 
 	<!-- Local Network Permission (for agent server discovery) -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>We need access to your local network to communicate with the diagnostic agent server.</string>
-
-	<!-- Bonjour Services (if using mDNS discovery) -->
+	<string>We need access to your local network to discover glasses and talk to the agent.</string>
 	<key>NSBonjourServices</key>
 	<array>
+		<string>_meta-wearable._tcp</string>
+		<string>_meta-wearable._udp</string>
 		<string>_bonjour._tcp</string>
 	</array>
 

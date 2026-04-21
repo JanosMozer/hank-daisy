@@ -8,8 +8,6 @@ struct ContentView: View {
     @StateObject private var ttsManager = TTSManager()
     @StateObject private var streamViewModel: StreamViewModel
 
-    @State private var agentURL: URL?
-
     init() {
         let dvm = DeviceSessionManager()
         let sm = StreamSessionManager()
@@ -28,11 +26,9 @@ struct ContentView: View {
         _ttsManager = StateObject(wrappedValue: tm)
         _streamViewModel = StateObject(wrappedValue: svm)
 
-        // Load saved agent URL
-        let savedURL = UserDefaults.standard.string(forKey: "agentURL")
-            .flatMap { URL(string: $0) }
-            ?? URL(string: "ws://127.0.0.1:8765")!
-        svm.initializeAgent(serverURL: savedURL)
+        // Load saved API Key
+        let savedKey = UserDefaults.standard.string(forKey: "openRouterApiKey") ?? ""
+        svm.initializeAgent(apiKey: savedKey)
     }
 
     var body: some View {
@@ -42,7 +38,7 @@ struct ContentView: View {
                    deviceManager.deviceSessionState == .started {
                     StreamView(viewModel: streamViewModel)
                 } else {
-                    RegistrationView(deviceManager: deviceManager)
+                    RegistrationView(deviceManager: deviceManager, streamViewModel: streamViewModel)
                 }
             }
             .navigationBarBackButtonHidden()
