@@ -1,9 +1,7 @@
 import AVFoundation
 import Combine
 
-/// Manages text-to-speech with sentence-by-sentence queue and barge-in detection.
-/// Detects sentence boundaries (. ! ? followed by space) and speaks each sentence
-/// as it arrives, enabling real-time streaming audio to the glasses.
+/// Manages text-to-speech with sentence-by-sentence streaming and real-time playback.
 @MainActor
 class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
     @Published var isSpeaking = false
@@ -12,23 +10,21 @@ class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
     private var currentUtterance: AVSpeechUtterance?
     private var accumulatedText = ""
 
+    /// Initialize speech synthesizer delegate.
     override init() {
         super.init()
         synthesizer.delegate = self
     }
 
-    /// Add text to be spoken. Automatically detects sentence boundaries and
-    /// queues sentences for immediate speech.
+    /// Add text chunk and queue sentences as they become complete.
     func addText(_ text: String) {
         accumulatedText += text
 
-        // Detect and queue complete sentences
         let sentences = detectSentences(in: accumulatedText)
         for sentence in sentences {
             sentenceQueue.append(sentence)
         }
 
-        // Remove processed sentences from accumulated text
         var processed = ""
         for sentence in sentences {
             if let range = accumulatedText.range(of: sentence) {
@@ -36,27 +32,24 @@ class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
             }
         }
 
-        // Start speaking the next sentence if not already speaking
         if !isSpeaking && !sentenceQueue.isEmpty {
             speakNextSentence()
         }
     }
 
-    /// Finish speaking and process any remaining accumulated text.
+    /// Finish speaking and process remaining accumulated text.
     func finishSpeaking() {
-        // Queue any remaining accumulated text as a final sentence
         if !accumulatedText.trimmingCharacters(in: .whitespaces).isEmpty {
             sentenceQueue.append(accumulatedText.trimmingCharacters(in: .whitespaces))
             accumulatedText = ""
         }
 
-        // Speak queued sentences
         if !isSpeaking && !sentenceQueue.isEmpty {
             speakNextSentence()
         }
     }
 
-    /// Stop speaking immediately and clear the queue.
+    /// Stop speaking immediately and clear queue.
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
         sentenceQueue.removeAll()
@@ -64,8 +57,6 @@ class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
         currentUtterance = nil
         isSpeaking = false
     }
-
-    // MARK: - Private Methods
 
     private func speakNextSentence() {
         guard !sentenceQueue.isEmpty else {
@@ -86,7 +77,6 @@ class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
     }
 
     /// Detect complete sentences ending with . ! ? followed by whitespace.
-    /// Returns sentences in order, does not remove them from input.
     private func detectSentences(in text: String) -> [String] {
         var sentences: [String] = []
         var currentSentence = ""
@@ -113,13 +103,8 @@ class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
         return sentences
     }
 
-    // MARK: - AVSpeechSynthesizerDelegate
-
-    func speechSynthesizer(
-        _ synthesizer: AVSpeechSynthesizer,
-        didFinish utterance: AVSpeechUtterance
-    ) {
-        // Speak the next queued sentence
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        // Speak next queued sentence.
         if !sentenceQueue.isEmpty {
             speakNextSentence()
         } else {
@@ -127,10 +112,8 @@ class TTSManager: NSObject, AVSpeechSynthesizerDelegate, ObservableObject {
         }
     }
 
-    func speechSynthesizer(
-        _ synthesizer: AVSpeechSynthesizer,
-        didCancel utterance: AVSpeechUtterance
-    ) {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        // Mark speaking as complete.
         isSpeaking = false
     }
 }

@@ -1,8 +1,7 @@
 import Foundation
 import Combine
 
-/// Central orchestration ViewModel: voice → agent → TTS.
-/// Coordinates VoiceManager, AgentClient, TTSManager, and glasses integration.
+/// Orchestrates voice recognition, agent queries, and text-to-speech streaming.
 @MainActor
 class StreamViewModel: ObservableObject {
     @Published var chatMessages: [ChatMessage] = []
@@ -17,27 +16,19 @@ class StreamViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
-    init(
-        deviceSessionManager: DeviceSessionManager,
-        streamSessionManager: StreamSessionManager,
-        voiceManager: VoiceManager,
-        ttsManager: TTSManager
-    ) {
+    /// Initialize with all dependent managers.
+    init(deviceSessionManager: DeviceSessionManager, streamSessionManager: StreamSessionManager, voiceManager: VoiceManager, ttsManager: TTSManager) {
         self.deviceSessionManager = deviceSessionManager
         self.streamSessionManager = streamSessionManager
         self.voiceManager = voiceManager
         self.ttsManager = ttsManager
-
         setupBindings()
     }
 
-    // MARK: - Setup
-
-    /// Initialize the agent client with a server URL.
+    /// Create and connect agent client with server URL.
     func initializeAgent(serverURL: URL) {
         agentClient = AgentClient(serverURL: serverURL)
         agentURL = serverURL
-
         Task {
             do {
                 try await agentClient?.connect()
@@ -47,19 +38,15 @@ class StreamViewModel: ObservableObject {
         }
     }
 
-    /// Setup Combine bindings between voice, agent, and TTS.
+    /// Bind voice state changes to automatic query dispatch.
     private func setupBindings() {
-        // When voice detects "Hey Hank" → start active listening
         voiceManager.$state
             .sink { [weak self] state in
                 switch state {
                 case .processing:
-                    // User has finished speaking their question
                     let question = self?.voiceManager.recognizedText ?? ""
                     if !question.isEmpty && !question.lowercased().contains("hey hank") {
-                        Task {
-                            await self?.analyzeWithQuestion(question)
-                        }
+                        Task { await self?.analyzeWithQuestion(question) }
                     }
                 default:
                     break
@@ -68,9 +55,7 @@ class StreamViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    // MARK: - Voice & Listening
-
-    /// Start listening for the "Hey Hank" wake word.
+    /// Start passive listening for "Hey Hank" wake word.
     func startWakeWordListening() {
         voiceManager.startPassiveListening()
     }
@@ -80,78 +65,60 @@ class StreamViewModel: ObservableObject {
         voiceManager.stopListening()
     }
 
-    // MARK: - Agent Queries
-
-    /// Send a text query to the agent, optionally with a camera frame.
+    /// Send query to agent with optional frame and stream response for TTS.
     private func analyzeWithQuestion(_ question: String) async {
         guard let agentClient = agentClient else {
             appendMessage(.assistant, "Agent not connected")
             return
         }
 
-        // Append user message to chat
         appendMessage(.user, question)
-
         isAnalyzing = true
 
-        // Capture the current frame if available
         let frameBase64 = streamSessionManager.captureFrameAsBase64()
 
-        // Stream response from agent
         var fullResponse = ""
         for await event in agentClient.query(text: question, frameData: frameBase64?.data(using: .utf8)) {
             switch event {
             case .chunk(let text):
                 fullResponse += text
                 ttsManager.addText(text)
-
             case .done:
                 ttsManager.finishSpeaking()
                 isAnalyzing = false
-
             case .error(let msg):
                 appendMessage(.assistant, "Error: \(msg)")
                 isAnalyzing = false
             }
         }
 
-        // If we got a full response, add it to chat
         if !fullResponse.isEmpty {
             appendMessage(.assistant, fullResponse)
         }
     }
 
-    // MARK: - Glasses Stream
-
-    /// Initialize and start the glasses stream.
+    /// Initialize and start glasses camera stream.
     func startGlassesStream() async {
         guard let deviceSession = deviceSessionManager.getActiveSession() else {
             appendMessage(.assistant, "No device session active")
             return
         }
-
         await streamSessionManager.initializeStream(from: deviceSession)
     }
 
-    /// Stop the glasses stream.
+    /// Stop glasses stream.
     func stopGlassesStream() async {
         await streamSessionManager.stopStream()
     }
 
-    // MARK: - Chat Management
-
-    /// Append a message to the chat history.
+    /// Append message to chat history.
     private func appendMessage(_ role: ChatMessage.Role, _ text: String) {
         let message = ChatMessage(role: role, text: text, timestamp: Date().timeIntervalSince1970)
         chatMessages.append(message)
-
-        // Keep last 100 messages
-        if chatMessages.count > 100 {
-            chatMessages.removeFirst()
-        }
+        if chatMessages.count > 100 { chatMessages.removeFirst() }
     }
 
-    /// Clear all messages.
+    /// Clear all chat messages.
     func clearChat() {
         chatMessages.removeAll()
     }

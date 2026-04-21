@@ -1,7 +1,6 @@
 import Foundation
 
-/// Thread-safe WebSocket client for communicating with the Hank agent server.
-/// Handles reconnection, session persistence, and streaming responses.
+/// Thread-safe WebSocket client for Hank agent server with session persistence and streaming.
 actor AgentClient: NSObject, URLSessionWebSocketDelegate {
     private var webSocket: URLSessionWebSocket?
     private let serverURL: URL
@@ -9,14 +8,14 @@ actor AgentClient: NSObject, URLSessionWebSocketDelegate {
     private let receiveQueue = DispatchQueue(label: "com.hankdaisy.agent.receive")
     private var isConnected = false
 
-    /// Initialize with the server URL (e.g., ws://192.168.1.100:8765)
+    /// Initialize with server URL (e.g., ws://192.168.1.100:8765).
     init(serverURL: URL) {
         self.serverURL = serverURL
         self.sessionID = UUID().uuidString
         super.init()
     }
 
-    /// Connect to the WebSocket server.
+    /// Establish connection to WebSocket server.
     func connect() async throws {
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
         webSocket = session.webSocketTask(with: serverURL)
@@ -24,18 +23,14 @@ actor AgentClient: NSObject, URLSessionWebSocketDelegate {
         isConnected = true
     }
 
-    /// Disconnect from the server.
+    /// Close connection to server.
     func disconnect() {
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
         isConnected = false
     }
 
-    /// Send a query to the agent and stream back responses.
-    /// - Parameters:
-    ///   - text: The user's question
-    ///   - frameData: Optional JPEG frame data (base64-encoded by this function)
-    /// - Returns: An AsyncStream of AgentEvents
+    /// Send query to agent and stream back response chunks.
     func query(text: String, frameData: Data? = nil) -> AsyncStream<AgentEvent> {
         AsyncStream { continuation in
             Task {
@@ -106,25 +101,12 @@ actor AgentClient: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    // MARK: - URLSessionWebSocketDelegate
-
-    nonisolated func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didOpenWithProtocol protocol: String?
-    ) {
-        // Connection established
+    nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        // Connection established.
     }
 
-    nonisolated func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
-        reason: Data?
-    ) {
-        // Connection closed
-        Task {
-            await disconnect()
-        }
+    nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        // Disconnect when connection closes.
+        Task { await disconnect() }
     }
 }

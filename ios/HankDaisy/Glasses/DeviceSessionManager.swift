@@ -2,8 +2,7 @@ import Foundation
 import MWDATCore
 import Combine
 
-/// Manages the lifecycle of a DeviceSession with the Oakley Meta Vanguard glasses.
-/// Handles registration, connection, and session state transitions.
+/// Manages Oakley Meta Vanguard glasses registration, connection, and session lifecycle.
 @MainActor
 class DeviceSessionManager: NSObject, ObservableObject {
     @Published var registrationState: WearablesRegistrationState = .unregistered
@@ -16,7 +15,7 @@ class DeviceSessionManager: NSObject, ObservableObject {
     private var deviceSession: DeviceSession?
     private var cancellables = Set<AnyCancellable>()
 
-    /// Initialize and configure Wearables.
+    /// Initialize and configure Wearables SDK.
     func initialize() async {
         do {
             try Wearables.configure()
@@ -29,7 +28,7 @@ class DeviceSessionManager: NSObject, ObservableObject {
         }
     }
 
-    /// Start the registration process (opens Meta AI app).
+    /// Start registration process which opens Meta AI app.
     func startRegistration() async {
         do {
             try await wearables?.startRegistration()
@@ -38,7 +37,7 @@ class DeviceSessionManager: NSObject, ObservableObject {
         }
     }
 
-    /// Handle the callback URL from Meta AI app after registration.
+    /// Handle Meta AI app callback URL after registration.
     func handleRegistrationCallback(url: URL) async {
         do {
             try await Wearables.shared.handleUrl(url)
@@ -47,7 +46,7 @@ class DeviceSessionManager: NSObject, ObservableObject {
         }
     }
 
-    /// Create and start a DeviceSession for the best available device.
+    /// Create and start DeviceSession with best available device.
     func createAndStartSession() async {
         do {
             guard let wearables = wearables else {
@@ -55,7 +54,6 @@ class DeviceSessionManager: NSObject, ObservableObject {
                 return
             }
 
-            // Use AutoDeviceSelector to pick the best available device
             let selector = AutoDeviceSelector(wearables: wearables)
             deviceSession = try wearables.createSession(deviceSelector: selector)
 
@@ -65,7 +63,7 @@ class DeviceSessionManager: NSObject, ObservableObject {
         }
     }
 
-    /// Stop the current DeviceSession.
+    /// Stop current DeviceSession.
     func stopSession() async {
         do {
             try deviceSession?.stop()
@@ -84,12 +82,10 @@ class DeviceSessionManager: NSObject, ObservableObject {
         }
     }
 
-    /// Get the current active DeviceSession.
+    /// Get current active DeviceSession.
     func getActiveSession() -> DeviceSession? {
         return deviceSession
     }
-
-    // MARK: - Private Observation Methods
 
     private func observeRegistrationState() async {
         guard let wearables = wearables else { return }
@@ -102,9 +98,7 @@ class DeviceSessionManager: NSObject, ObservableObject {
         guard let wearables = wearables else { return }
         for await devices in wearables.devicesStream() {
             availableDevices = devices
-            if devices.isEmpty {
-                activeDevice = nil
-            }
+            if devices.isEmpty { activeDevice = nil }
         }
     }
 

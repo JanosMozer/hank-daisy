@@ -76,10 +76,10 @@ xcode HankDaisy.xcodeproj
 4. In the "Team" dropdown, select your Apple Developer account
 5. Set a unique **Bundle ID** (e.g., `com.yourname.hankdaisy`)
 6. Verify these capabilities are present:
-   - ✅ Bluetooth Peripheral
-   - ✅ Bluetooth Central
-   - ✅ External Accessory
-   - ✅ Keychain Sharing
+   -  Bluetooth Peripheral
+   -  Bluetooth Central
+   -  External Accessory
+   -  Keychain Sharing
 
 ### Step 3: Update Info.plist (Production)
 
@@ -114,7 +114,7 @@ python -m agent.server
 
 You should see:
 ```
-✓ Hank agent server running on ws://0.0.0.0:8765
+ Hank agent server running on ws://0.0.0.0:8765
 ```
 
 ### Step 5: Deploy to iPhone
@@ -123,12 +123,12 @@ You should see:
 
 **In Xcode:**
 1. Top toolbar, select your iPhone as the deployment target (not "iPhone Simulator")
-2. Product → Run (⌘R)
+2. Product  Run (R)
 3. Wait for the build to complete
 
 **On your iPhone:**
 - A notification appears: "Your Developer Is Not Trusted"
-- Go to Settings → General → VPN & Device Management
+- Go to Settings  General  VPN & Device Management
 - Find your name and tap it
 - Tap "Trust [Your Name]"
 - Tap "Trust" again in the popup
@@ -165,10 +165,10 @@ The app will now launch on your phone.
 **Problem:** Entitlements not signed properly
 
 **Fix:**
-1. Product → Clean Build Folder (⇧⌘K)
-2. Check Team is set (Project Settings → Signing & Capabilities)
+1. Product  Clean Build Folder (K)
+2. Check Team is set (Project Settings  Signing & Capabilities)
 3. Check Bundle ID is unique (not used by another app)
-4. Try again: Product → Run (⌘R)
+4. Try again: Product  Run (R)
 
 ### "Failed to connect to agent"
 **Problem:** iPhone can't reach Python server
@@ -180,7 +180,7 @@ The app will now launch on your phone.
 4. Make sure firewall allows port 8765 (or check your router)
 
 ### "Microphone Permission Denied"
-**Fix:** Settings → HankDaisy → Microphone → Allow
+**Fix:** Settings  HankDaisy  Microphone  Allow
 
 ### "Glasses Not Found"
 **Problem:** Glasses not registered
@@ -227,7 +227,7 @@ Once you've confirmed everything works on your device:
 ```
 
 ### 3. Distribute via TestFlight or App Store
-- In Xcode: Product → Archive
+- In Xcode: Product  Archive
 - Follow Xcode organizer prompts
 - Can share with others via TestFlight (beta testing) or submit to App Store
 
@@ -237,28 +237,28 @@ Once you've confirmed everything works on your device:
 
 ```
 iPhone + Oakley Meta Vanguard glasses (Bluetooth)
-                ↓
+                
          [iOS App — HankDaisy]
-                ↓
+                
          [MWDAT SDK integration]
         - Glasses registration (Meta AI app OAuth)
         - Video frame streaming
         - Audio routing to glasses speaker
-                ↓
+                
          [Voice + TTS pipeline]
         - SFSpeechRecognizer ("Hey Hank" wake word)
         - AVSpeechSynthesizer (sentence-by-sentence)
-                ↓
+                
          [WebSocket agent client]
         - Same protocol as Android
         - Streaming text responses
-                ↓
+                
          [Python Agent Server (on Mac)]
         - ws://192.168.1.100:8765
         - Receives: {text, frame?, session_id}
         - Streams: {chunk, done, error}
         - Maintains conversation history per session_id
-                ↓
+                
          [OpenRouter / Gemini API]
 ```
 
@@ -272,7 +272,7 @@ If something doesn't work:
 2. Check **ios/QUICKSTART.md** for simulator testing (easier to debug)
 3. Check **troubleshooting** section above
 4. Check Python agent logs: `python -m agent.server` (watch for errors)
-5. Check Xcode build output: Product → Build Log (⌘⇧K)
+5. Check Xcode build output: Product  Build Log (K)
 
 ---
 
@@ -282,6 +282,6 @@ Once you have iOS working:
 
 **Phase 2b — Android Changes**
 The Android app (in `android/` dir) will also be wired to the same WebSocket agent. This means:
-- Change prompts once → both platforms update
+- Change prompts once  both platforms update
 - Share conversation history across devices
 - Consistent mechanics expertise across all platforms

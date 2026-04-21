@@ -4,21 +4,13 @@ Real-time voice-driven automotive diagnostics for Oakley Meta Vanguard glasses.
 
 ## Architecture
 
-```
 Glasses (Bluetooth)
-    ↓
-StreamSessionManager (MWDAT SDK)
-    ↓
-Voice: "Hey Hank?" → VoiceManager (SFSpeechRecognizer)
-    ↓
-Question → StreamViewModel → AgentClient (WebSocket)
-    ↓
-Python Agent Server (ws://host:8765)
-    ↓
-Response (streamed) → TTSManager (AVSpeechSynthesizer)
-    ↓
-Glasses Audio
-```
+  -> StreamSessionManager (MWDAT SDK)
+  -> Voice: "Hey Hank?" -> VoiceManager (SFSpeechRecognizer)
+  -> Question -> StreamViewModel -> AgentClient (WebSocket)
+  -> Python Agent Server (ws://host:8765)
+  -> Response (streamed) -> TTSManager (AVSpeechSynthesizer)
+  -> Glasses Audio
 
 ## Requirements
 
@@ -66,8 +58,8 @@ python -m agent.server
 xcode ios/HankDaisy.xcodeproj
 
 # In Xcode:
-# - Project Settings → Signing & Capabilities → Team: (your Apple ID)
-# - Product → Run (⌘R) on iPhone simulator
+# - Project Settings > Signing & Capabilities > Team: (your Apple ID)
+# - Product > Run on iPhone simulator
 ```
 
 The app auto-enables MockDeviceKit in DEBUG builds, so you don't need real glasses to test on simulator.
@@ -82,11 +74,11 @@ The app auto-enables MockDeviceKit in DEBUG builds, so you don't need real glass
 # 4. iPhone + Mac on same Wi-Fi network
 
 # In Xcode:
-# 1. Project Settings → Signing & Capabilities → Team: (your paid Apple ID)
+# 1. Project Settings > Signing & Capabilities > Team: (your paid Apple ID)
 # 2. Set Bundle ID to something unique (e.g., com.yourname.hankdaisy)
 # 3. Plug iPhone into Mac via USB
-# 4. Product → Run (⌘R)
-# 5. On iPhone: Settings → General → VPN & Device Management → Trust developer
+# 4. Product > Run
+# 5. On iPhone: Settings > General > VPN & Device Management > Trust developer
 # 6. App launches and prompts for glasses registration
 ```
 
@@ -114,7 +106,7 @@ The app auto-enables MockDeviceKit in DEBUG builds, so you don't need real glass
 - **StreamSessionManager** — manages StreamSession, captures video frames, encodes to JPEG
 
 ### ViewModels
-- **StreamViewModel** — orchestrates voice → agent → TTS flow
+- **StreamViewModel** — orchestrates voice  agent  TTS flow
 - Maintains chat history (last 100 messages)
 - Auto-saves agent URL to UserDefaults
 
@@ -178,12 +170,12 @@ HANK_AGENT_URL = ws://192.168.1.100:8765
 - Check entitlements in Xcode: Signing & Capabilities must show bluetooth-central + external-accessory
 
 ### Microphone Permission Denied
-- Go to Settings → HankDaisy → Microphone → Allow
+- Go to Settings  HankDaisy  Microphone  Allow
 
 ### MockDeviceKit Not Working (Simulator)
 - Only works in DEBUG builds
 - Check Xcode build configuration is set to Debug
-- Restart simulator: Device → Erase All Content and Settings
+- Restart simulator: Device  Erase All Content and Settings
 
 ## Testing Checklist
 

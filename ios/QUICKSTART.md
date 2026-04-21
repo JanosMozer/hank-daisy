@@ -15,7 +15,7 @@ python -m agent.server
 ```
 You should see:
 ```
-✓ Hank agent server running on ws://localhost:8765
+ Hank agent server running on ws://localhost:8765
 ```
 
 **2. Open iOS project in Xcode**
@@ -25,7 +25,7 @@ xcode HankDaisy.xcodeproj
 ```
 
 **3. Run on simulator**
-- In Xcode: Product → Run (⌘R)
+- In Xcode: Product  Run (R)
 - Select iPhone 17.0+ simulator
 - App launches
 
@@ -38,7 +38,7 @@ xcode HankDaisy.xcodeproj
 - Agent responds with streaming text
 - TTS plays the response
 
-That's it! The full pipeline works: voice → agent → TTS.
+That's it! The full pipeline works: voice  agent  TTS.
 
 ---
 
@@ -62,14 +62,14 @@ cp ios/Config.xcconfig.template ios/Config.xcconfig
 
 **2. Xcode Setup**
 - Open ios/HankDaisy.xcodeproj
-- Project → Signing & Capabilities
+- Project  Signing & Capabilities
 - Set Team to your Apple Developer account
 - Set Bundle ID to something unique (e.g., com.yourname.hankdaisy)
 
 **3. Deploy**
 - Plug iPhone into Mac via USB
-- Product → Run (⌘R)
-- On iPhone: Settings → General → VPN & Device Management → Trust Your Name
+- Product  Run (R)
+- On iPhone: Settings  General  VPN & Device Management  Trust Your Name
 - App launches, shows RegistrationView
 
 **4. Register Glasses**
@@ -118,19 +118,19 @@ Failed to connect to agent
 
 ### Microphone Permission Denied
 **Fix:**
-- Settings → HankDaisy → Microphone → Allow
+- Settings  HankDaisy  Microphone  Allow
 
 ### App Crashes on Launch
 **Fix:**
 - Xcode might need to be rebuilt:
-  - Product → Clean Build Folder (⇧⌘K)
-  - Product → Build (⌘B)
-  - Product → Run (⌘R)
+  - Product  Clean Build Folder (K)
+  - Product  Build (B)
+  - Product  Run (R)
 
 ### Simulator Shows "No video feed"
 **Fix:**
-- Restart simulator: Device → Erase All Content and Settings
-- Rebuild app: clean → build → run
+- Restart simulator: Device  Erase All Content and Settings
+- Rebuild app: clean  build  run
 
 ### Real Device: Glasses Not Pairing
 **Fix:**
