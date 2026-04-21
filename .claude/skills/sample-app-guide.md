@@ -2,178 +2,192 @@
 description: Building a complete DAT app with camera streaming and photo capture
 ---
 
-# Sample App Guide (Android)
+# Sample App Guide (iOS)
 
 Guide for building a complete DAT SDK app with camera streaming and photo capture.
 
 ## Overview
 
-This guide walks through building an Android app that connects to Meta glasses, streams video, and captures photos. Use it as a reference alongside the [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples).
+This guide walks through building an iOS app that connects to Meta glasses, streams video, and captures photos. Use it as a reference alongside the [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-ios/tree/main/samples).
 
 ## Project setup
 
-1. Create a new Android Studio project (Compose Activity)
-2. Add the Maven repository in `settings.gradle.kts`
-3. Add `mwdat-core`, `mwdat-camera`, `mwdat-mockdevice` dependencies
-4. Configure `AndroidManifest.xml` (see [Getting Started](getting-started.md))
+1. Create a new Xcode project (SwiftUI App)
+2. Add the SDK via SPM: `https://github.com/facebook/meta-wearables-dat-ios`
+3. Add `MWDATCore`, `MWDATCamera`, and `MWDATMockDevice` to your target
+4. Configure `Info.plist` (see [Getting Started](getting-started.md))
 
 ## App architecture
 
 A typical DAT app has these components:
 
 ```text
-app/src/main/java/com/example/myapp/
-├── MyApplication.kt                # Application class, SDK init
-├── MainActivity.kt                 # Registration, permission handling
-├── stream/
-│   └── StreamViewModel.kt          # Streaming, photo capture
-└── ui/
-    ├── RegistrationScreen.kt       # Registration UI
-    └── StreamScreen.kt             # Video preview, capture
+MyDATApp/
+├── MyDATApp.swift              # App entry point, SDK init
+├── ViewModels/
+│   ├── WearablesViewModel.swift    # Registration, device management
+│   └── StreamSessionViewModel.swift # Streaming, photo capture
+└── Views/
+    ├── MainAppView.swift           # Navigation
+    ├── RegistrationView.swift      # Registration UI
+    └── StreamView.swift            # Video preview, capture button
 ```
 
 ## SDK initialization
 
-```kotlin
-import com.meta.wearable.dat.core.Wearables
+```swift
+import MWDATCore
 
-class MyApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        Wearables.initialize(this)
+@main
+struct MyDATApp: App {
+    init() {
+        do {
+            try Wearables.configure()
+        } catch {
+            assertionFailure("Wearables SDK configuration failed: \(error)")
+        }
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            MainAppView()
+                .onOpenURL { url in
+                    Task {
+                        _ = try? await Wearables.shared.handleUrl(url)
+                    }
+                }
+        }
+    }
+}
+```
+
+## Wearables ViewModel
+
+```swift
+import MWDATCore
+
+@MainActor
+class WearablesViewModel: ObservableObject {
+    @Published var registrationState: String = "Unknown"
+    @Published var devices: [DeviceIdentifier] = []
+
+    private let wearables = Wearables.shared
+
+    func observeState() {
+        Task {
+            for await state in wearables.registrationStateStream() {
+                self.registrationState = "\(state)"
+            }
+        }
+        Task {
+            for await devices in wearables.devicesStream() {
+                self.devices = devices.map { $0.identifier }
+            }
+        }
+    }
+
+    func register() {
+        try? wearables.startRegistration()
+    }
+
+    func unregister() {
+        try? wearables.startUnregistration()
     }
 }
 ```
 
 ## Stream ViewModel
 
-```kotlin
-import com.meta.wearable.dat.camera.types.StreamConfiguration
-import com.meta.wearable.dat.camera.types.StreamSessionState
-import com.meta.wearable.dat.camera.types.VideoQuality
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+```swift
+import MWDATCamera
+import MWDATCore
 
-class StreamViewModel : ViewModel() {
-    private val _streamState = MutableStateFlow<StreamSessionState?>(null)
-    val streamState = _streamState.asStateFlow()
+@MainActor
+class StreamSessionViewModel: ObservableObject {
+    @Published var currentFrame: UIImage?
+    @Published var streamState: String = "Stopped"
+    @Published var capturedPhoto: Data?
 
-    private var session: StreamSession? = null
+    private var session: StreamSession?
 
-    fun startStream(context: Context) {
-        val streamSession = Wearables.startStreamSession(
-            context = context,
-            deviceSelector = AutoDeviceSelector(),
-            streamConfiguration = StreamConfiguration(
-                videoQuality = VideoQuality.MEDIUM,
-                frameRate = 24,
-            ),
+    func startStream() {
+        let wearables = Wearables.shared
+        let config = StreamSessionConfig(
+            videoCodec: .raw,
+            resolution: .medium,
+            frameRate: 24
         )
-        session = streamSession
+        let selector = AutoDeviceSelector(wearables: wearables)
+        let session = StreamSession(streamSessionConfig: config, deviceSelector: selector)
+        self.session = session
 
-        viewModelScope.launch {
-            streamSession.state.collect { state ->
-                _streamState.value = state
+        _ = session.statePublisher.listen { [weak self] state in
+            Task { @MainActor in
+                self?.streamState = "\(state)"
             }
         }
 
-        viewModelScope.launch {
-            streamSession.videoStream.collect { frame ->
-                // Update UI with frame
-            }
-        }
-    }
-
-    fun stopStream() {
-        session?.stop()
-        session = null
-    }
-
-    fun capturePhoto() {
-        session?.capturePhoto()
-            ?.onSuccess { photoData ->
-                // Handle photo
-            }
-            ?.onFailure { error ->
-                // Handle error
-            }
-    }
-}
-```
-
-## Registration handling
-
-```kotlin
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        lifecycleScope.launch {
-            Wearables.registrationState.collect { state ->
-                // Update registration UI
+        _ = session.videoFramePublisher.listen { [weak self] frame in
+            guard let image = frame.makeUIImage() else { return }
+            Task { @MainActor in
+                self?.currentFrame = image
             }
         }
 
-        lifecycleScope.launch {
-            Wearables.devices.collect { devices ->
-                // Update device list
+        _ = session.photoDataPublisher.listen { [weak self] photoData in
+            Task { @MainActor in
+                self?.capturedPhoto = photoData.data
             }
         }
+
+        Task { await session.start() }
     }
 
-    fun register() {
-        Wearables.startRegistration(this)
+    func stopStream() {
+        Task { await session?.stop() }
+        session = nil
     }
 
-    fun unregister() {
-        Wearables.startUnregistration(this)
+    func capturePhoto() {
+        session?.capturePhoto(format: .jpeg)
     }
 }
 ```
 
 ## Testing with MockDeviceKit
 
-```kotlin
-import com.meta.wearable.dat.mockdevice.MockDeviceKit
-import com.meta.wearable.dat.mockdevice.api.MockDeviceKitConfig
+Add mock device support to develop without glasses:
 
-fun setupMockDevice(context: Context) {
-    val mockDeviceKit = MockDeviceKit.getInstance(context)
+```swift
+import MWDATMockDevice
 
-    // Attach fake implementations (auto-initializes Wearables if needed).
-    // Starts Registered by default. Pass MockDeviceKitConfig(initiallyRegistered = false)
-    // to start in unregistered state for testing registration flows.
+func setupMockDevice() async {
+    let mockDeviceKit = MockDeviceKit.shared
     mockDeviceKit.enable()
 
-    val device = mockDeviceKit.pairRaybanMeta()
-    device.powerOn()
-    device.unfold()
+    let device = mockDeviceKit.pairRaybanMeta()
     device.don()
 
-    // Set up mock camera feed
-    val camera = device.services.camera
-    camera.setCameraFeed(videoUri)
+    if let videoURL = Bundle.main.url(forResource: "test_video", withExtension: "mov") {
+        let camera = device.services.camera
+        camera.setCameraFeed(fileURL: videoURL)
+    }
 }
 
-fun tearDownMockDevice(context: Context) {
-    val mockDeviceKit = MockDeviceKit.getInstance(context)
-    // Unpairs all mock devices, clears pairedDevices, restores real stack
-    mockDeviceKit.disable()
+func tearDownMockDevice() {
+    MockDeviceKit.shared.disable()
 }
 ```
 
 ## Allowed dependencies
 
 Your DAT app should only depend on:
-- `mwdat-core` — always required
-- `mwdat-camera` — for camera streaming
-- `mwdat-mockdevice` — for testing
+- `MWDATCore` — always required
+- `MWDATCamera` — for camera streaming
+- `MWDATMockDevice` — for testing (can be test-only dependency)
 
 ## Links
 
-- [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples)
-- [Full integration guide](https://wearables.developer.meta.com/docs/build-integration-android)
+- [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-ios/tree/main/samples)
+- [Full integration guide](https://wearables.developer.meta.com/docs/build-integration-ios)
 - [Developer documentation](https://wearables.developer.meta.com/docs/develop/)

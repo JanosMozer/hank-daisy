@@ -2,41 +2,45 @@
 description: StreamSession, video frames, photo capture, resolution/frame rate configuration
 ---
 
-# Camera Streaming (Android)
+# Camera Streaming (iOS)
 
 Guide for implementing camera streaming and photo capture with the DAT SDK.
 
 ## Key concepts
 
 - **StreamSession**: Main interface for camera streaming
-- **VideoFrame**: Individual video frames from the stream
-- **StreamConfiguration**: Configure resolution, frame rate
+- **VideoFrame**: Individual video frames — call `.makeUIImage()` to render
+- **StreamSessionConfig**: Configure resolution, frame rate, and codec
 - **PhotoData**: Still image captured from glasses
 
 ## Creating a StreamSession
 
-```kotlin
-import com.meta.wearable.dat.camera.types.StreamConfiguration
-import com.meta.wearable.dat.camera.types.VideoQuality
-import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
+```swift
+import MWDATCamera
+import MWDATCore
 
-val session = Wearables.startStreamSession(
-    context = context,
-    deviceSelector = AutoDeviceSelector(),
-    streamConfiguration = StreamConfiguration(
-        videoQuality = VideoQuality.MEDIUM,  // 504x896
-        frameRate = 24,
-    ),
+let wearables = Wearables.shared
+let deviceSelector = AutoDeviceSelector(wearables: wearables)
+
+let config = StreamSessionConfig(
+    videoCodec: .raw,
+    resolution: .medium,  // 504x896
+    frameRate: 24
+)
+
+let session = StreamSession(
+    streamSessionConfig: config,
+    deviceSelector: deviceSelector
 )
 ```
 
 ### Resolution options
 
-| Quality | Size |
-|---------|------|
-| `VideoQuality.HIGH` | 720 x 1280 |
-| `VideoQuality.MEDIUM` | 504 x 896 |
-| `VideoQuality.LOW` | 360 x 640 |
+| Resolution | Size |
+|-----------|------|
+| `.high` | 720 x 1280 |
+| `.medium` | 504 x 896 |
+| `.low` | 360 x 640 |
 
 ### Frame rate options
 
@@ -46,22 +50,22 @@ Lower resolution and frame rate yield higher visual quality due to less Bluetoot
 
 ## Observing stream state
 
-`StreamSessionState` transitions: `STARTING` -> `STARTED` -> `STREAMING` -> `STOPPING` -> `STOPPED` -> `CLOSED`
+`StreamSessionState` transitions: `stopping` → `stopped` → `waitingForDevice` → `starting` → `streaming` → `paused`
 
-```kotlin
-lifecycleScope.launch {
-    session.state.collect { state ->
-        when (state) {
-            StreamSessionState.STREAMING -> {
-                // Stream is active, frames flowing
-            }
-            StreamSessionState.STOPPED -> {
-                // Stream ended, release resources
-            }
-            StreamSessionState.CLOSED -> {
-                // Session fully closed
-            }
-            else -> { /* handle other states */ }
+```swift
+let stateToken = session.statePublisher.listen { state in
+    Task { @MainActor in
+        switch state {
+        case .streaming:
+            // Stream is active, frames are flowing
+        case .waitingForDevice:
+            // Waiting for glasses to connect
+        case .stopped:
+            // Stream ended — release resources
+        case .paused:
+            // Temporarily suspended — keep connection, wait
+        default:
+            break
         }
     }
 }
@@ -69,48 +73,62 @@ lifecycleScope.launch {
 
 ## Receiving video frames
 
-```kotlin
-lifecycleScope.launch {
-    session.videoStream.collect { frame ->
-        // Display frame bitmap
-        updatePreview(frame)
+```swift
+let frameToken = session.videoFramePublisher.listen { frame in
+    guard let image = frame.makeUIImage() else { return }
+    Task { @MainActor in
+        self.previewImage = image
     }
 }
 ```
 
+## Starting and stopping
+
+```swift
+// Start streaming
+Task { await session.start() }
+
+// Stop streaming
+Task { await session.stop() }
+```
+
 ## Photo capture
 
-```kotlin
-session.capturePhoto()
-    .onSuccess { photoData ->
-        // Handle captured photo data
-        val imageBytes = photoData.data
-    }
-    .onFailure { error ->
-        // Handle capture error
-    }
+Capture a still photo while streaming:
+
+```swift
+// Listen for photo data
+let photoToken = session.photoDataPublisher.listen { photoData in
+    let imageData = photoData.data
+    // Convert to UIImage or save
+}
+
+// Trigger capture
+session.capturePhoto(format: .jpeg)
 ```
 
 ## Bandwidth and quality
 
 Resolution and frame rate are constrained by Bluetooth Classic bandwidth. The SDK automatically reduces quality when bandwidth is limited:
-1. First lowers resolution (e.g., HIGH -> MEDIUM)
-2. Then reduces frame rate (e.g., 30 -> 24), never below 15 FPS
+1. First lowers resolution (e.g., High → Medium)
+2. Then reduces frame rate (e.g., 30 → 24), never below 15 FPS
 
 Request lower settings for higher visual quality per frame.
 
 ## Device selection
 
-```kotlin
-// Auto-select best available device
-val auto = AutoDeviceSelector()
+Use `AutoDeviceSelector` to let the SDK pick the best device, or `SpecificDeviceSelector` for a known device:
 
-// Select specific device
-val specific = SpecificDeviceSelector(deviceIdentifier = deviceId)
+```swift
+// Auto-select
+let auto = AutoDeviceSelector(wearables: wearables)
+
+// Specific device
+let specific = SpecificDeviceSelector(deviceIdentifier: deviceId)
 ```
 
 ## Links
 
-- [StreamSession API reference](https://wearables.developer.meta.com/docs/reference/android/dat/0.6/com_meta_wearable_dat_camera_streamsession)
-- [StreamConfiguration API reference](https://wearables.developer.meta.com/docs/reference/android/dat/0.6/com_meta_wearable_dat_camera_types_streamconfiguration)
-- [Integration guide](https://wearables.developer.meta.com/docs/build-integration-android)
+- [StreamSession API reference](https://wearables.developer.meta.com/docs/reference/ios_swift/dat/0.6/mwdatcamera_streamsession)
+- [StreamSessionConfig API reference](https://wearables.developer.meta.com/docs/reference/ios_swift/dat/0.6/mwdatcamera_streamsessionconfig)
+- [Integration guide](https://wearables.developer.meta.com/docs/build-integration-ios)

@@ -1,47 +1,33 @@
 ---
-description: Build the Android project using Gradle
+description: Build the Xcode project using Swift Package Manager
 ---
 
-Build the Android project using Gradle.
+Build the Xcode project using Swift Package Manager.
 
 ## Prerequisites
 
-- Android Studio or Gradle CLI
-- Android SDK with API 26+ (minSdk)
-- GitHub personal access token with `read:packages` scope
-
-## Setup GitHub token
-
-The SDK is distributed via GitHub Packages. Set your token:
-
-```bash
-# Option 1: Environment variable
-export GITHUB_TOKEN=ghp_your_token_here
-
-# Option 2: local.properties
-echo "github_token=ghp_your_token_here" >> local.properties
-```
+- Xcode 15.0 or later
+- iOS 16.0+ deployment target
+- Meta Wearables DAT SDK added via SPM
 
 ## Build
 
+Open the `.xcodeproj` or `.xcworkspace` in Xcode and build with Cmd+B, or from the command line:
+
 ```bash
-./gradlew assembleDebug
+xcodebuild -scheme YourScheme -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 15' build
 ```
 
-## Install on device
+## Run on device
+
+To test with real glasses, build and run on a physical device:
 
 ```bash
-./gradlew installDebug
-```
-
-## Run tests
-
-```bash
-./gradlew test
+xcodebuild -scheme YourScheme -destination 'platform=iOS,id=YOUR_DEVICE_UDID' build
 ```
 
 ## Common build issues
 
-- **Authentication error**: Ensure `GITHUB_TOKEN` is set or `github_token` in `local.properties`
-- **Missing repository**: Add the Maven repository for `https://maven.pkg.github.com/facebook/meta-wearables-dat-android` in `settings.gradle.kts`
-- **Version not found**: Check available versions at [GitHub Packages](https://github.com/orgs/facebook/packages?repo_name=meta-wearables-dat-android)
+- **Missing package**: Ensure `https://github.com/facebook/meta-wearables-dat-ios` is added in Xcode > File > Add Package Dependencies
+- **Minimum deployment target**: The SDK requires iOS 16.0+
+- **Entitlements**: Ensure `bluetooth-peripheral` and `external-accessory` background modes are enabled

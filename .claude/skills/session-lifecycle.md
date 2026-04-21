@@ -2,7 +2,7 @@
 description: Device session states, pause/resume, availability monitoring
 ---
 
-# Session Lifecycle (Android)
+# Session Lifecycle (iOS)
 
 Guide for managing device session states in DAT SDK integrations.
 
@@ -24,13 +24,16 @@ Your app observes session state changes — the device decides when to transitio
 
 ## Observing session state
 
-```kotlin
-lifecycleScope.launch {
-    Wearables.getDeviceSessionState(deviceId).collect { state ->
-        when (state) {
-            SessionState.RUNNING -> onRunning()
-            SessionState.PAUSED -> onPaused()
-            SessionState.STOPPED -> onStopped()
+```swift
+Task {
+    for await state in Wearables.shared.deviceSessionStateStream(for: deviceId) {
+        switch state {
+        case .running:
+            // Confirm UI shows session is live
+        case .paused:
+            // Keep connection, wait for running or stopped
+        case .stopped:
+            // Release resources, allow user to restart
         }
     }
 }
@@ -38,13 +41,15 @@ lifecycleScope.launch {
 
 ## StreamSession state transitions
 
+StreamSession has its own state flow:
+
 ```text
-STARTING -> STARTED -> STREAMING -> STOPPING -> STOPPED -> CLOSED
+stopped → waitingForDevice → starting → streaming → paused → stopped
 ```
 
-```kotlin
-lifecycleScope.launch {
-    session.state.collect { state ->
+```swift
+let token = session.statePublisher.listen { state in
+    Task { @MainActor in
         // React to state changes
     }
 }
@@ -70,16 +75,18 @@ Your app should **not** attempt to restart while paused — wait for `RUNNING` o
 
 ## Device availability
 
-```kotlin
-lifecycleScope.launch {
-    Wearables.devices.collect { devices ->
+Monitor device availability to know when sessions can start:
+
+```swift
+Task {
+    for await devices in Wearables.shared.devicesStream() {
         // Update list of available glasses
     }
 }
 ```
 
 Key behaviors:
-- Closing hinges disconnects Bluetooth -> forces `STOPPED`
+- Closing hinges disconnects Bluetooth → forces `STOPPED`
 - Opening hinges restores Bluetooth but does **not** restart sessions
 - Start a new session after the device becomes available again
 

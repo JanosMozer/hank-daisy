@@ -2,7 +2,7 @@
 description: Common issues, Developer Mode, version compatibility, state machine diagnosis
 ---
 
-# Debugging (Android)
+# Debugging (iOS)
 
 Guide for diagnosing common issues with DAT SDK integrations.
 
@@ -10,16 +10,16 @@ Guide for diagnosing common issues with DAT SDK integrations.
 
 ```text
 Device not connecting?
-|
-+-- Is Developer Mode enabled? -> Enable in Meta AI app settings
-|
-+-- Is device registered? -> Check registrationState
-|
-+-- Is device in range? -> Bluetooth on, glasses powered on
-|
-+-- Did you call initialize()? -> Must call Wearables.initialize(context) first
-|
-+-- Stream not receiving frames? -> Check device connection state
+│
+├── Is Developer Mode enabled? → Enable in Meta AI app settings
+│
+├── Is device registered? → Check registration state
+│
+├── Is device in range? → Bluetooth on, glasses powered on
+│
+├── Is the app registered? → Check registrationStateStream()
+│
+└── Stream stuck in waitingForDevice? → Check device availability
 ```
 
 ## Developer Mode
@@ -29,7 +29,7 @@ Developer Mode must be enabled for 3P apps to access device features.
 ### Enabling Developer Mode
 
 1. Open Meta AI app on phone
-2. Go to Settings -> (Your connected glasses)
+2. Go to Settings → (Your connected glasses)
 3. Find "Developer Mode" toggle
 4. Toggle ON
 5. Device may restart
@@ -37,7 +37,7 @@ Developer Mode must be enabled for 3P apps to access device features.
 ### Symptoms of Developer Mode disabled
 
 - Registration completes but device never connects
-- StreamSession stuck without streaming
+- StreamSession stuck in `waitingForDevice`
 - Permission requests fail or never appear
 
 ### Common gotchas
@@ -51,15 +51,14 @@ Developer Mode must be enabled for 3P apps to access device features.
 ### Expected flow
 
 ```text
-STARTING -> STARTED -> STREAMING -> STOPPING -> STOPPED -> CLOSED
+stopped → waitingForDevice → starting → streaming → stopped
 ```
 
-### Not receiving frames
+### Stuck in waitingForDevice
 
-- Check that `Wearables.initialize(context)` was called
-- Verify device is connected and in range
-- Ensure camera permission was granted
-- Check that the device selector matches an available device
+- Device not in range or not connected
+- Device not reporting availability
+- DeviceSelector not matching any device
 
 ### Unexpected stop
 
@@ -81,35 +80,35 @@ Ensure compatible versions of SDK, Meta AI app, and glasses firmware:
 
 | Issue | Workaround |
 |-------|-----------|
-| No internet -> registration fails | Internet required for registration |
+| No internet → registration fails | Internet required for registration |
 | Streams started with glasses doffed pause when donned | Unpause by tapping side of glasses |
-| `DeviceSession` unreliable with camera stream | Avoid using `DeviceSession` |
+| `DeviceStateSession` unreliable with camera stream | Avoid using `DeviceStateSession` |
+| [iOS] Meta Ray-Ban Display: no audio feedback on pause/resume | Will be fixed in future release |
 
 ## Adding debug logging
 
-```kotlin
-import android.util.Log
+```swift
+import os
 
-private const val TAG = "DATWearables"
+private let logger = Logger(subsystem: "com.yourapp", category: "Wearables")
 
 // In your streaming code:
-Log.d(TAG, "Stream state changed to: $state")
-Log.e(TAG, "Stream error", exception)
+logger.debug("Stream state changed to: \(state)")
+logger.error("Stream error: \(error)")
 ```
 
 ## Checklist
 
-- [ ] `Wearables.initialize(context)` called before any API use
 - [ ] Developer Mode enabled in Meta AI app
 - [ ] Meta AI app updated to compatible version
 - [ ] Glasses firmware updated to compatible version
 - [ ] Internet connection available for registration
-- [ ] Bluetooth permissions granted (`BLUETOOTH_CONNECT`)
-- [ ] Correct URL scheme in AndroidManifest.xml intent filter
-- [ ] `APPLICATION_ID` meta-data set in manifest
+- [ ] Bluetooth enabled on phone
+- [ ] Correct URL scheme configured in Info.plist
+- [ ] Background modes enabled (bluetooth-peripheral, external-accessory)
 
 ## Links
 
 - [Known issues](https://wearables.developer.meta.com/docs/knownissues)
 - [Version dependencies](https://wearables.developer.meta.com/docs/version-dependencies)
-- [Troubleshooting discussions](https://github.com/facebook/meta-wearables-dat-android/discussions)
+- [Troubleshooting discussions](https://github.com/facebook/meta-wearables-dat-ios/discussions)

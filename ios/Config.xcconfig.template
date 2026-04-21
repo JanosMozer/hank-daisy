@@ -1,0 +1,17 @@
+// HankDaisy iOS Configuration
+// Copy this file to Config.xcconfig and fill in your values
+
+// HANK_AGENT_URL: WebSocket URL for the Python agent server
+// Examples:
+//   - Simulator (on same Mac): ws://localhost:8765
+//   - Real device (on local network): ws://192.168.1.100:8765
+// HANK_AGENT_URL = ws://localhost:8765
+
+// Meta Wearables API Credentials (for production)
+// Leave these blank for development mode (uses MockDeviceKit)
+// MWDAT_CLIENT_TOKEN =
+// MWDAT_META_APP_ID =
+// MWDAT_TEAM_ID =
+
+// Speech Recognition
+SPEECH_RECOGNIZER_LANGUAGE = en-US
