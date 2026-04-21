@@ -108,8 +108,6 @@
 		};
 /* End PBXGroup section */
 
-	archiveVersion = 1;
-	classes = {};
-	objectVersion = 60;
+	};
 	rootObject = 00000100000000001111111111111111 /* Project object */;
 }
