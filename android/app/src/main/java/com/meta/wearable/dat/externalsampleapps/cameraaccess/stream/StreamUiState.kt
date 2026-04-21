@@ -36,6 +36,9 @@ data class ChatMessage(
     val role: Role,
     val text: String,
     val timestamp: Long = System.currentTimeMillis(),
+    /** Absolute path to a JPEG the user attached to this message (chat-only
+     *  mode). Null for voice/text-only turns and for Hank's replies. */
+    val imagePath: String? = null,
 ) {
     enum class Role { USER, ASSISTANT }
 }

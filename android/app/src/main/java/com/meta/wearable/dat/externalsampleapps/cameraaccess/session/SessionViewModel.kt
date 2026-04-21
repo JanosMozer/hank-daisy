@@ -439,7 +439,8 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                         if (m.role == ChatMessage.Role.USER) "user" else "assistant",
                     )
                     .put("text", m.text)
-                    .put("ts", m.timestamp),
+                    .put("ts", m.timestamp)
+                    .apply { if (m.imagePath != null) put("imagePath", m.imagePath) },
             )
         }
         return JSONObject()
@@ -462,6 +463,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                         else ChatMessage.Role.ASSISTANT,
                     text = mo.optString("text"),
                     timestamp = mo.optLong("ts", System.currentTimeMillis()),
+                    imagePath = mo.optString("imagePath", "").ifBlank { null },
                 )
             }
         return Session(
