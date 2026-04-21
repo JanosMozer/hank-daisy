@@ -1,0 +1,111 @@
+import SwiftUI
+
+/// Registration flow: shows Wearables registration state and handles callback from Meta AI app.
+struct RegistrationView: View {
+    @ObservedObject var deviceManager: DeviceSessionManager
+    @State private var showingRegistration = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "glasses")
+                .font(.system(size: 64))
+                .foregroundColor(.orange)
+
+            Text("Pair with Oakley Meta Vanguard")
+                .font(.headline)
+
+            Text("You'll be redirected to the Meta AI app to complete pairing with your glasses.")
+                .font(.body)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+
+            switch deviceManager.registrationState {
+            case .unregistered:
+                Button(action: startRegistration) {
+                    Text("Start Registration")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+            case .registering:
+                VStack(spacing: 12) {
+                    ProgressView()
+                    Text("Registering...")
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity)
+
+            case .registered:
+                VStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.green)
+
+                    Text("Registered!")
+                        .font(.headline)
+
+                    if !deviceManager.availableDevices.isEmpty {
+                        Text("Found \(deviceManager.availableDevices.count) device(s)")
+                            .foregroundColor(.gray)
+                    }
+
+                    Button(action: createSession) {
+                        Text("Connect to Glasses")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
+            if let error = deviceManager.errorMessage {
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundColor(.red)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+
+                    Button("Dismiss") {
+                        deviceManager.errorMessage = nil
+                    }
+                    .frame(maxWidth: .infinity)
+                    .tint(.red)
+                }
+            }
+
+            Spacer()
+        }
+        .padding()
+        .onAppear {
+            Task {
+                await deviceManager.initialize()
+            }
+        }
+        .onOpenURL { url in
+            Task {
+                await deviceManager.handleRegistrationCallback(url: url)
+            }
+        }
+    }
+
+    private func startRegistration() {
+        Task {
+            await deviceManager.startRegistration()
+        }
+    }
+
+    private func createSession() {
+        Task {
+            await deviceManager.createAndStartSession()
+        }
+    }
+}
+
+#Preview {
+    RegistrationView(deviceManager: DeviceSessionManager())
+}

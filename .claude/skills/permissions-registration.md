@@ -2,7 +2,7 @@
 description: App registration with Meta AI, camera permission flows
 ---
 
-# Permissions & Registration (Android)
+# Permissions & Registration (iOS)
 
 Guide for app registration and camera permission flows in the DAT SDK.
 
@@ -18,24 +18,36 @@ All permission grants occur through the Meta AI companion app.
 
 ### Start registration
 
-```kotlin
-Wearables.startRegistration(context)
+```swift
+func startRegistration() throws {
+    try Wearables.shared.startRegistration()
+}
 ```
 
-This opens the Meta AI app where the user approves your app.
+This opens the Meta AI app where the user approves your app. Meta AI then calls back via your URL scheme.
+
+### Handle the callback
+
+```swift
+.onOpenURL { url in
+    Task {
+        _ = try? await Wearables.shared.handleUrl(url)
+    }
+}
+```
 
 ### Observe registration state
 
-```kotlin
-lifecycleScope.launch {
-    Wearables.registrationState.collect { state ->
-        when (state) {
-            is RegistrationState.Registered -> {
-                // App is registered, can request permissions
-            }
-            is RegistrationState.Unregistered -> {
-                // App is not registered
-            }
+```swift
+Task {
+    for await state in Wearables.shared.registrationStateStream() {
+        switch state {
+        case .registered:
+            // App is registered, can request permissions
+        case .unregistered:
+            // App is not registered
+        case .registering:
+            // Registration in progress
         }
     }
 }
@@ -43,47 +55,27 @@ lifecycleScope.launch {
 
 ### Unregister
 
-```kotlin
-Wearables.startUnregistration(context)
+```swift
+func startUnregistration() throws {
+    try Wearables.shared.startUnregistration()
+}
 ```
 
 ## Camera permissions
 
 ### Check permission status
 
-```kotlin
-val status = Wearables.checkPermissionStatus(Permission.CAMERA)
-if (status == PermissionStatus.Granted) {
-    // Start streaming
-}
+```swift
+let status = try await Wearables.shared.checkPermissionStatus(.camera)
 ```
 
 ### Request permission
 
-Use the SDK's `RequestPermissionContract` with the Activity Result API:
-
-```kotlin
-private var permissionContinuation: CancellableContinuation<PermissionStatus>? = null
-private val permissionMutex = Mutex()
-
-private val permissionsResultLauncher =
-    registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
-        permissionContinuation?.resume(result)
-        permissionContinuation = null
-    }
-
-suspend fun requestWearablesPermission(permission: Permission): PermissionStatus {
-    return permissionMutex.withLock {
-        suspendCancellableCoroutine { continuation ->
-            permissionContinuation = continuation
-            continuation.invokeOnCancellation { permissionContinuation = null }
-            permissionsResultLauncher.launch(permission)
-        }
-    }
-}
+```swift
+let status = try await Wearables.shared.requestPermission(.camera)
 ```
 
-Users can choose:
+The SDK opens Meta AI for the user to grant access. Users can choose:
 - **Allow once** — temporary, single-session grant
 - **Allow always** — persistent grant
 
@@ -98,7 +90,7 @@ Users can link multiple glasses to Meta AI. The SDK handles this transparently:
 
 | Mode | Registration behavior |
 |------|----------------------|
-| Developer Mode | Registration always allowed (use `APPLICATION_ID` = `0`) |
+| Developer Mode | Registration always allowed (use `MetaAppID` = `0`) |
 | Production | Users must be in proper release channel |
 
 For production, get your `APPLICATION_ID` from the [Wearables Developer Center](https://wearables.developer.meta.com/).

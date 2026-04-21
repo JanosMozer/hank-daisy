@@ -1,0 +1,115 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+/* Begin PBXFileReference section */
+		00000001000000001111111111111111 /* AgentClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift.ast; path = Agent/AgentClient.swift; sourceTree = "<group>"; };
+		00000002000000001111111111111111 /* AgentEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Agent/AgentEvent.swift; sourceTree = "<group>"; };
+		00000003000000001111111111111111 /* VoiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Voice/VoiceManager.swift; sourceTree = "<group>"; };
+		00000004000000001111111111111111 /* TTSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTS/TTSManager.swift; sourceTree = "<group>"; };
+		00000005000000001111111111111111 /* DeviceSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glasses/DeviceSessionManager.swift; sourceTree = "<group>"; };
+		00000006000000001111111111111111 /* StreamSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Glasses/StreamSessionManager.swift; sourceTree = "<group>"; };
+		00000007000000001111111111111111 /* StreamViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel/StreamViewModel.swift; sourceTree = "<group>"; };
+		00000008000000001111111111111111 /* StreamView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/StreamView.swift; sourceTree = "<group>"; };
+		00000009000000001111111111111111 /* ChatPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/ChatPanel.swift; sourceTree = "<group>"; };
+		00000010000000001111111111111111 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/SettingsView.swift; sourceTree = "<group>"; };
+		00000011000000001111111111111111 /* RegistrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/RegistrationView.swift; sourceTree = "<group>"; };
+		00000012000000001111111111111111 /* HankDaisyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/HankDaisyApp.swift; sourceTree = "<group>"; };
+		00000013000000001111111111111111 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/ContentView.swift; sourceTree = "<group>"; };
+		00000014000000001111111111111111 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = HankDaisy/Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		00000100000000001111111111111111 = {
+			isa = PBXGroup;
+			children = (
+				00000200000000001111111111111111 /* HankDaisy */,
+				00000014000000001111111111111111 /* Info.plist */,
+			);
+			sourceTree = "<group>";
+		};
+		00000200000000001111111111111111 /* HankDaisy */ = {
+			isa = PBXGroup;
+			children = (
+				00000300000000001111111111111111 /* App */,
+				00000400000000001111111111111111 /* Agent */,
+				00000500000000001111111111111111 /* Glasses */,
+				00000600000000001111111111111111 /* Voice */,
+				00000700000000001111111111111111 /* TTS */,
+				00000800000000001111111111111111 /* ViewModel */,
+				00000900000000001111111111111111 /* UI */,
+			);
+			sourceTree = "<group>";
+		};
+		00000300000000001111111111111111 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				00000012000000001111111111111111 /* HankDaisyApp.swift */,
+				00000013000000001111111111111111 /* ContentView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		00000400000000001111111111111111 /* Agent */ = {
+			isa = PBXGroup;
+			children = (
+				00000001000000001111111111111111 /* AgentClient.swift */,
+				00000002000000001111111111111111 /* AgentEvent.swift */,
+			);
+			path = Agent;
+			sourceTree = "<group>";
+		};
+		00000500000000001111111111111111 /* Glasses */ = {
+			isa = PBXGroup;
+			children = (
+				00000005000000001111111111111111 /* DeviceSessionManager.swift */,
+				00000006000000001111111111111111 /* StreamSessionManager.swift */,
+			);
+			path = Glasses;
+			sourceTree = "<group>";
+		};
+		00000600000000001111111111111111 /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				00000003000000001111111111111111 /* VoiceManager.swift */,
+			);
+			path = Voice;
+			sourceTree = "<group>";
+		};
+		00000700000000001111111111111111 /* TTS */ = {
+			isa = PBXGroup;
+			children = (
+				00000004000000001111111111111111 /* TTSManager.swift */,
+			);
+			path = TTS;
+			sourceTree = "<group>";
+		};
+		00000800000000001111111111111111 /* ViewModel */ = {
+			isa = PBXGroup;
+			children = (
+				00000007000000001111111111111111 /* StreamViewModel.swift */,
+			);
+			path = ViewModel;
+			sourceTree = "<group>";
+		};
+		00000900000000001111111111111111 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				00000008000000001111111111111111 /* StreamView.swift */,
+				00000009000000001111111111111111 /* ChatPanel.swift */,
+				00000010000000001111111111111111 /* SettingsView.swift */,
+				00000011000000001111111111111111 /* RegistrationView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	rootObject = 00000100000000001111111111111111 /* Project object */;
+}
