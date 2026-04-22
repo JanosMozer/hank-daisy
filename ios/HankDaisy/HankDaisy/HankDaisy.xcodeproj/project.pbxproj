@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BA32165A2F980014001E7532 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = BA3216592F980014001E7532 /* MWDATCamera */; };
+		BA32165C2F980014001E7532 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = BA32165B2F980014001E7532 /* MWDATCore */; };
+		BA32165E2F980014001E7532 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = BA32165D2F980014001E7532 /* MWDATMockDevice */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		BA3215C52F97145E001E7532 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BA32165A2F980014001E7532 /* MWDATCamera in Frameworks */,
+				BA32165E2F980014001E7532 /* MWDATMockDevice in Frameworks */,
+				BA32165C2F980014001E7532 /* MWDATCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +87,7 @@
 				BA3215B62F97145D001E7532 /* HankDaisy */,
 				BA3215C72F97145E001E7532 /* HankDaisyTests */,
 				BA3215D12F97145E001E7532 /* HankDaisyUITests */,
+				BA3216512F9741B3001E7532 /* Frameworks */,
 				BA3215B52F97145D001E7532 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,6 +100,13 @@
 				BA3215CE2F97145E001E7532 /* HankDaisyUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BA3216512F9741B3001E7532 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -112,6 +129,9 @@
 			);
 			name = HankDaisy;
 			packageProductDependencies = (
+				BA3216592F980014001E7532 /* MWDATCamera */,
+				BA32165B2F980014001E7532 /* MWDATCore */,
+				BA32165D2F980014001E7532 /* MWDATMockDevice */,
 			);
 			productName = HankDaisy;
 			productReference = BA3215B42F97145D001E7532 /* HankDaisy.app */;
@@ -195,6 +215,9 @@
 			);
 			mainGroup = BA3215AB2F97145D001E7532;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BA3216582F980014001E7532 /* XCLocalSwiftPackageReference "../../../meta-wearables-dat-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BA3215B52F97145D001E7532 /* Products */;
 			projectDirPath = "";
@@ -397,6 +420,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Hank needs Bluetooth to connect to your glasses.\nHank needs Bluetooth to connect to the glasses.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hank needs microphone access to listen for your voice commands.\nHank needs microphone access to listen for your voice commands.\nHank needs microphone access to listen for your voice commands.\nHank needs microphone access to listen for your voice commands.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hank uses speech recognition to understand your requests.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -436,6 +463,10 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Hank needs Bluetooth to connect to your glasses.\nHank needs Bluetooth to connect to the glasses.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Hank needs microphone access to listen for your voice commands.\nHank needs microphone access to listen for your voice commands.\nHank needs microphone access to listen for your voice commands.\nHank needs microphone access to listen for your voice commands.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Hank uses speech recognition to understand your requests.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -593,6 +624,28 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		BA3216582F980014001E7532 /* XCLocalSwiftPackageReference "../../../meta-wearables-dat-ios" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../../meta-wearables-dat-ios";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BA3216592F980014001E7532 /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MWDATCamera;
+		};
+		BA32165B2F980014001E7532 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MWDATCore;
+		};
+		BA32165D2F980014001E7532 /* MWDATMockDevice */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MWDATMockDevice;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BA3215AC2F97145D001E7532 /* Project object */;
 }

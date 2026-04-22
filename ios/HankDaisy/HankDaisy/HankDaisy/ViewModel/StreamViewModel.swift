@@ -6,7 +6,7 @@ import Combine
 class StreamViewModel: ObservableObject {
     @Published var chatMessages: [ChatMessage] = []
     @Published var isAnalyzing = false
-    @Published var agentURL: URL?
+    @Published var isAgentInitialized = false
 
     let deviceSessionManager: DeviceSessionManager
     let streamSessionManager: StreamSessionManager
@@ -25,16 +25,14 @@ class StreamViewModel: ObservableObject {
         setupBindings()
     }
 
-    /// Create and connect agent client with server URL.
-    func initializeAgent(serverURL: URL) {
-        agentClient = AgentClient(serverURL: serverURL)
-        agentURL = serverURL
-        Task {
-            do {
-                try await agentClient?.connect()
-            } catch {
-                appendMessage(.assistant, "Failed to connect to agent: \(error.localizedDescription)")
-            }
+    /// Create and connect agent client with API Key.
+    func initializeAgent(apiKey: String) {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !key.isEmpty {
+            agentClient = AgentClient(apiKey: key)
+            isAgentInitialized = true
+        } else {
+            isAgentInitialized = false
         }
     }
 

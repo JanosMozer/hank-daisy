@@ -14,17 +14,39 @@ class DeviceSessionManager: NSObject, ObservableObject {
     private var wearables: WearablesInterface?
     private var deviceSession: DeviceSession?
     private var cancellables = Set<AnyCancellable>()
+    private var isObserving = false
 
     /// Initialize and configure Wearables SDK.
     func initialize() async {
-        do {
-            try Wearables.configure()
+        // Only configure once - SDK throws alreadyConfigured on subsequent calls
+        if wearables == nil {
+            do {
+                try Wearables.configure()
+            } catch WearablesError.alreadyConfigured {
+                // Fine - already configured, just grab the shared instance
+                print("[DeviceMgr] Wearables already configured, using shared instance")
+            } catch {
+                errorMessage = "Failed to configure Wearables: \(error.localizedDescription)"
+                print("[DeviceMgr] configure() error: \(error)")
+                return
+            }
             wearables = Wearables.shared
-            
+        }
+
+        // Read current state immediately (may already be registered)
+        let currentState = wearables!.registrationState
+        registrationState = currentState
+        print("[DeviceMgr] Current registrationState on init: \(currentState.description)")
+
+        let currentDevices = wearables!.devices
+        availableDevices = currentDevices
+        print("[DeviceMgr] Devices on init: \(currentDevices)")
+
+        // Start observers only once
+        if !isObserving {
+            isObserving = true
             Task { await observeRegistrationState() }
             Task { await observeAvailableDevices() }
-        } catch {
-            errorMessage = "Failed to configure Wearables: \(error.localizedDescription)"
         }
     }
 

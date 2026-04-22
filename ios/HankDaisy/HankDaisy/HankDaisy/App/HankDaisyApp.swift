@@ -14,8 +14,8 @@ struct HankDaisyApp: App {
     }
 
     private func setupWearables() {
-        // In DEBUG mode, set up MockDeviceKit for simulator testing
-        #if DEBUG
+        // In the simulator, set up MockDeviceKit for testing without hardware
+        #if targetEnvironment(simulator)
         MockDeviceKit.shared.enable()
         #endif
     }

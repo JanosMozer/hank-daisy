@@ -4,24 +4,23 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @ObservedObject var viewModel: StreamViewModel
-    @State private var agentURLString = ""
+    @State private var apiKeyString = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Agent Connection") {
-                    TextField("WebSocket URL", text: $agentURLString)
+                Section("OpenRouter API Key") {
+                    SecureField("sk-or-v1-...", text: $apiKeyString)
                         .textInputAutocapitalization(.none)
-                        .keyboardType(.URL)
                         .autocorrectionDisabled()
 
-                    Button(action: connectAgent) {
-                        Text("Connect")
+                    Button(action: saveApiKey) {
+                        Text("Save & Connect")
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
 
-                    if let url = viewModel.agentURL {
-                        Text("Connected: \(url.absoluteString)")
+                    if viewModel.isAgentInitialized {
+                        Text("API Key Loaded ✓")
                             .font(.caption)
                             .foregroundColor(.green)
                     }
@@ -53,24 +52,16 @@ struct SettingsView: View {
                 }
             }
             .onAppear {
-                // Load saved URL if available
-                if let url = viewModel.agentURL {
-                    agentURLString = url.absoluteString
-                } else {
-                    // Default for simulator
-                    agentURLString = "ws://localhost:8765"
-                }
+                // Load saved API Key if available
+                apiKeyString = UserDefaults.standard.string(forKey: "openRouterApiKey") ?? ""
             }
         }
     }
 
-    private func connectAgent() {
-        guard !agentURLString.isEmpty,
-              let url = URL(string: agentURLString) else {
-            return
-        }
-
-        viewModel.initializeAgent(serverURL: url)
+    private func saveApiKey() {
+        let key = apiKeyString.trimmingCharacters(in: .whitespacesAndNewlines)
+        UserDefaults.standard.set(key, forKey: "openRouterApiKey")
+        viewModel.initializeAgent(apiKey: key)
     }
 }
 

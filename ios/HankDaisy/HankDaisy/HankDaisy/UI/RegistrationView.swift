@@ -3,7 +3,8 @@ import SwiftUI
 /// Registration flow: shows Wearables registration state and handles callback from Meta AI app.
 struct RegistrationView: View {
     @ObservedObject var deviceManager: DeviceSessionManager
-    @State private var showingRegistration = false
+    @ObservedObject var streamViewModel: StreamViewModel
+    @State private var showingSettings = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -90,6 +91,17 @@ struct RegistrationView: View {
             Spacer()
         }
         .padding()
+        .navigationTitle("Hank Daisy")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showingSettings = true }) {
+                    Image(systemName: "gear")
+                }
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(viewModel: streamViewModel)
+        }
         .onAppear {
             Task {
                 await deviceManager.initialize()
@@ -116,5 +128,16 @@ struct RegistrationView: View {
 }
 
 #Preview {
-    RegistrationView(deviceManager: DeviceSessionManager())
+    let dvm = DeviceSessionManager()
+    let ssm = StreamSessionManager()
+    let vm = VoiceManager()
+    let tm = TTSManager()
+    let svm = StreamViewModel(
+        deviceSessionManager: dvm,
+        streamSessionManager: ssm,
+        voiceManager: vm,
+        ttsManager: tm
+    )
+    
+    return RegistrationView(deviceManager: dvm, streamViewModel: svm)
 }
