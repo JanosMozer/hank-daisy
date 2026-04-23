@@ -70,7 +70,7 @@ class StreamViewModel(
 ) : AndroidViewModel(application) {
 
   companion object {
-    private const val TAG = "CameraAccess:StreamViewModel"
+    private const val TAG = "HankDaisy:StreamViewModel"
     private val INITIAL_STATE = StreamUiState()
     private val SESSION_TERMINAL_STATES = setOf(StreamSessionState.CLOSED)
   }

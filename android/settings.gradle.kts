@@ -48,6 +48,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "CameraAccess"
+rootProject.name = "HankDaisy"
 
 include(":app")

@@ -47,7 +47,7 @@ class ElevenLabsTtsService(
     private val onSpeakingChanged: (Boolean) -> Unit,
 ) {
     companion object {
-        private const val TAG = "CameraAccess:ElevenLabs"
+        private const val TAG = "HankDaisy:ElevenLabs"
         // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms
         // first-chunk generation vs ~300ms for turbo). Slightly less
         // expressive but much faster for realtime conversation.

@@ -31,7 +31,7 @@ import org.json.JSONObject
 class GeminiService {
 
     companion object {
-        private const val TAG = "CameraAccess:GeminiService"
+        private const val TAG = "HankDaisy:GeminiService"
         private const val API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
         private const val MODEL = "google/gemini-3.1-flash-lite-preview"

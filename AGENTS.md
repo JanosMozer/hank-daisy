@@ -366,9 +366,9 @@ open class MockDeviceKitTestCase<T : Any>(
 }
 ```
 
-## Using MockDeviceKit in the CameraAccess sample
+## Using MockDeviceKit in the HankDaisy sample
 
-The CameraAccess sample app includes a Debug menu for MockDeviceKit:
+The HankDaisy sample app includes a Debug menu for MockDeviceKit:
 
 1. Tap the **Debug icon** to open the MockDeviceKit menu
 2. Tap **Pair RayBan Meta** to create a simulated device
@@ -830,7 +830,7 @@ Guide for building a complete DAT SDK app with camera streaming and photo captur
 
 ## Overview
 
-This guide walks through building an Android app that connects to Meta glasses, streams video, and captures photos. Use it as a reference alongside the [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples).
+This guide walks through building an Android app that connects to Meta glasses, streams video, and captures photos. Use it as a reference alongside the [HankDaisy sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples).
 
 ## Project setup
 
@@ -996,7 +996,7 @@ Your DAT app should only depend on:
 
 ## Links
 
-- [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples)
+- [HankDaisy sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples)
 - [Full integration guide](https://wearables.developer.meta.com/docs/build-integration-android)
 - [Developer documentation](https://wearables.developer.meta.com/docs/develop/)
 

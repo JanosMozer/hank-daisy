@@ -1,13 +1,13 @@
 # Hank Daisy: System Architecture & Context Memory
 
-This document is the source of truth for understanding the `agent/` and `samples/CameraAccess/` directories, their interplay, and the system's architecture. Use this file as context when orienting new AI agent sessions to the `hank-daisy` repository.
+This document is the source of truth for understanding the `agent/` and `samples/HankDaisy/` directories, their interplay, and the system's architecture. Use this file as context when orienting new AI agent sessions to the `hank-daisy` repository.
 
 ## 1. System Structure
 Hank Daisy is a real-time, multimodal automotive diagnostic assistant utilizing a hybrid architecture that splits its heavy lifting between local hardware abstraction (an Android companion app) and remote python logic (telemetry & data parsing). 
 
 It is designed to receive live video frames alongside verbal queries, interpret automotive diagnostics, and parse LLM output responses dynamically into structured Markdown steps, checklists, and gauges.
 
-## 2. The Glasses SDK (`samples/CameraAccess/`)
+## 2. The Glasses SDK (`samples/HankDaisy/`)
 The Android application acts as both the hardware abstraction layer (interfacing directly with Meta Wearables via the DAT SDK) and a standalone edge client that controls the LLM UX.
 - **`StreamViewModel.kt`**: The core orchestrator. Manages connection sessions using the DAT SDK, captures microphone audio events, and sequences when autonomous images are grabbed or manual requests ("Ask Hank") are executed.
 - **`GeminiService.kt`**: An API wrapper for OpenRouter (OpenAI-compatible endpoints). It directly queries large vision models in real-time using complex structural prompts so it can process both "User Voice Queries" and autonomous background scans.

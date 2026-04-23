@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class VoiceCommandManager(private val context: Context) {
 
     companion object {
-        private const val TAG = "CameraAccess:VoiceCmd"
+        private const val TAG = "HankDaisy:VoiceCmd"
         /** Gap between recognizer cycles — kept very short so the user almost
          * never talks into a dead window. */
         private const val RESTART_DELAY_MS = 150L

@@ -38,7 +38,7 @@ class BargeInDetector(
     private val triggerMs: Long = 90L,
 ) {
     companion object {
-        private const val TAG = "CameraAccess:BargeIn"
+        private const val TAG = "HankDaisy:BargeIn"
         private const val SAMPLE_RATE = 16_000
     }
 

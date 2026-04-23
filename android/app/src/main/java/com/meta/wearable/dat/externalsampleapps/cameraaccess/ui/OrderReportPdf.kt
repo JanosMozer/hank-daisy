@@ -48,7 +48,7 @@ import java.util.Locale
  * shareable.
  */
 object OrderReportPdf {
-    private const val TAG = "CameraAccess:OrderReport"
+    private const val TAG = "HankDaisy:OrderReport"
     private const val PAGE_W = 612
     private const val PAGE_H = 792
     private const val MARGIN = 40f

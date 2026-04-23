@@ -51,7 +51,7 @@ class GlassesAudioManager(private val context: Context) {
     }
 
     companion object {
-        private const val TAG = "CameraAccess:GlassesAudio"
+        private const val TAG = "HankDaisy:GlassesAudio"
 
         /**
          * Flip to false to bypass ElevenLabs and use Android TTS directly —

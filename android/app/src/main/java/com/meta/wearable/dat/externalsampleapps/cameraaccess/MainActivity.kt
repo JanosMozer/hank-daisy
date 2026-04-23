@@ -6,9 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// CameraAccess Sample App - Main Activity
+// HankDaisy Sample App - Main Activity
 //
-// This is the main entry point for the CameraAccess sample application that demonstrates how to use
+// This is the main entry point for the HankDaisy sample application that demonstrates how to use
 // the Meta Wearables Device Access Toolkit (DAT) to:
 // - Initialize the DAT SDK
 // - Handle device permissions (Bluetooth, Internet)

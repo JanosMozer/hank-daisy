@@ -274,7 +274,7 @@ fun CameraAccessScaffold(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                   Icon(
                       imageVector = Icons.Default.Error,
-                      contentDescription = "Camera Access error",
+                      contentDescription = "HankDaisy error",
                       tint = MaterialTheme.colorScheme.error,
                   )
                   Spacer(modifier = Modifier.width(8.dp))

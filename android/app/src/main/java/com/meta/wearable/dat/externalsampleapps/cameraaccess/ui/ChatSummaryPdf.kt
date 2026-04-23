@@ -31,7 +31,7 @@ import java.util.Locale
  * as a single-page-per-section PDF and opens the system share sheet.
  */
 object ChatSummaryPdf {
-    private const val TAG = "CameraAccess:ChatSummaryPdf"
+    private const val TAG = "HankDaisy:ChatSummaryPdf"
     private const val PAGE_W = 612
     private const val PAGE_H = 792
     private const val MARGIN = 40f

@@ -105,7 +105,7 @@
 
 	<!-- Camera Permission (optional, for MockDeviceKit testing) -->
 	<key>NSCameraUsageDescription</key>
-	<string>We need camera access for testing without physical glasses.</string>
+	<string>HankDaisy needs the camera for testing without physical glasses.</string>
 
 	<!-- Photo Library Permission (optional, for saving captured frames) -->
 	<key>NSPhotoLibraryAddUsageDescription</key>

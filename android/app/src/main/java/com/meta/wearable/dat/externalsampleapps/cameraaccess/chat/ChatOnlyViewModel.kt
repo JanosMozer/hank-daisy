@@ -59,7 +59,7 @@ data class ChatOnlyUiState(
 class ChatOnlyViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        private const val TAG = "CameraAccess:ChatOnly"
+        private const val TAG = "HankDaisy:ChatOnly"
     }
 
     private val voiceCommand = VoiceCommandManager(application)

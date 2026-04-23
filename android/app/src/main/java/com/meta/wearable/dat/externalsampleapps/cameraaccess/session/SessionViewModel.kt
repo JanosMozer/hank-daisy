@@ -49,7 +49,7 @@ data class SessionsUiState(
 class SessionViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
-        private const val TAG = "CameraAccess:SessionVM"
+        private const val TAG = "HankDaisy:SessionVM"
         private const val PREFS = "hank_sessions_v1"
         private const val KEY_SESSIONS = "sessions_json"
         private const val KEY_PROFILE = "profile_json"
