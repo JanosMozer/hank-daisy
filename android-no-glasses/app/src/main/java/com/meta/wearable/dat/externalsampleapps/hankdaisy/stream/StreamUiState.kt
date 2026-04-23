@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * This source code is licensed under the license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+// StreamUiState - DAT Camera Streaming UI State
+//
+// This data class manages UI state for camera streaming operations using the DAT API.
+
+package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
+
+import android.graphics.Bitmap
+import com.meta.wearable.dat.camera.types.StreamSessionState
+
+data class StreamUiState(
+    val streamSessionState: StreamSessionState = StreamSessionState.STOPPED,
+    val videoFrame: Bitmap? = null,
+    val videoFrameCount: Int = 0,
+    val capturedPhoto: Bitmap? = null,
+    val isShareDialogVisible: Boolean = false,
+    val isCapturing: Boolean = false,
+    val isAnalyzing: Boolean = false,
+    val isListening: Boolean = false,
+    val isWakeWordActive: Boolean = false,
+    val isHankSpeaking: Boolean = false,
+    val spokenQuestion: String? = null,
+    val lastGeminiResponse: String? = null,
+    val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.FULL,
+    val chatMessages: List<ChatMessage> = emptyList(),
+)
+
+data class ChatMessage(
+    val role: Role,
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    /** Absolute path to a JPEG the user attached to this message (chat-only
+     *  mode). Null for voice/text-only turns and for Hank's replies. */
+    val imagePath: String? = null,
+) {
+    enum class Role { USER, ASSISTANT }
+}
