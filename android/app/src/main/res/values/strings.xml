@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2" project="cameraaccess">
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2" project="hankdaisy">
 
     <!-- Home Screen -->
     <string name="register_button_title" description="Connect App">Connect my glasses</string>
@@ -18,7 +18,7 @@
     <string name="live_stream" description="Live Stream">Live stream</string>
 
     <!-- Non Stream Screen -->
-    <string name="camera_access_icon_description" description="HankDaisy icon description">HankDaisy icon</string>
+    <string name="hank_daisy_icon_description" description="HankDaisy icon description">HankDaisy icon</string>
     <string name="non_stream_screen_description" description="Non stream screen description">Tap the Start streaming button to stream video from your glasses or use the camera button to take a photo from your glasses.</string>
     <string name="non_stream_screen_title" description="Non stream screen title">Stream Your Glasses Camera</string>
     <string name="waiting_for_active_device" description="Waiting for active device message">Waiting for an active device</string>

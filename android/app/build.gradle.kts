@@ -21,13 +21,13 @@ val localProps =
     }
 
 android {
-  namespace = "com.meta.wearable.dat.externalsampleapps.cameraaccess"
+  namespace = "com.meta.wearable.dat.externalsampleapps.hankdaisy"
   compileSdk = 35
 
   buildFeatures { buildConfig = true }
 
   defaultConfig {
-    applicationId = "com.meta.wearable.dat.externalsampleapps.cameraaccess"
+    applicationId = "com.meta.wearable.dat.externalsampleapps.hankdaisy"
     minSdk = 31
     targetSdk = 34
     versionCode = 1
