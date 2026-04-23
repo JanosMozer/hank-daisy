@@ -26,32 +26,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Routes the voice I/O loop through the Ray-Ban Meta glasses using their classic
- * Bluetooth profiles (the DAT SDK only exposes camera, not audio):
- *
- * - TTS replies: USAGE_MEDIA → played out via A2DP (the glasses' speakers).
- * - Mic capture: SCO/HFP enabled while listening → SpeechRecognizer reads the
- *   glasses' microphone.
- *
- * Requires the user to have paired the glasses as a normal Bluetooth headset
- * in addition to the DAT pairing. [glassesAudioStatus] reports whether that's
- * the case so the UI can prompt the user to fix it.
+ * Handles Hank's spoken replies and keeps track of the active Android audio
+ * route. The no-glasses app defaults to the phone mic/speaker, while still
+ * allowing normal Bluetooth audio devices when Android has routed media there.
  */
-class GlassesAudioManager(private val context: Context) {
+class AudioRouteManager(private val context: Context) {
 
     enum class AudioStatus {
-        /** Both mic (HFP) and speaker (A2DP) routes available — full glasses I/O. */
+        /** Both Bluetooth mic and speaker routes are available. */
         FULL,
-        /** Speaker available, mic not — TTS plays on glasses, mic falls back to phone. */
+        /** Bluetooth speaker available; speech recognition stays on the phone mic. */
         SPEAKER_ONLY,
-        /** Mic available, no A2DP speaker — voice in works, replies fall back to phone. */
+        /** Bluetooth mic available; replies fall back to the phone speaker. */
         MIC_ONLY,
         /** Neither — everything falls back to the phone. */
         NONE,
     }
 
     companion object {
-        private const val TAG = "HankDaisy:GlassesAudio"
+        private const val TAG = "HankDaisy:AudioRoute"
 
         /**
          * Flip to false to bypass ElevenLabs and use Android TTS directly —
@@ -65,8 +58,8 @@ class GlassesAudioManager(private val context: Context) {
     private var ttsReady = false
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    private val _glassesAudioStatus = MutableStateFlow(AudioStatus.NONE)
-    val glassesAudioStatus: StateFlow<AudioStatus> = _glassesAudioStatus.asStateFlow()
+    private val _audioRouteStatus = MutableStateFlow(AudioStatus.NONE)
+    val audioRouteStatus: StateFlow<AudioStatus> = _audioRouteStatus.asStateFlow()
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -161,9 +154,9 @@ class GlassesAudioManager(private val context: Context) {
     }
 
     /**
-     * Speak the reply through the glasses (A2DP) if connected, else through the
-     * phone. Tries ElevenLabs (high-quality voice) first; falls back to Android
-     * TTS if ElevenLabs isn't configured or its first sentence fails.
+     * Speak the reply through the active Bluetooth media route if connected,
+     * else through the phone. Tries ElevenLabs first; falls back to Android TTS
+     * if ElevenLabs isn't configured or its first sentence fails.
      *
      * Splits long text into sentence-sized chunks so stopSpeaking() can cut
      * Hank off within ~one sentence rather than waiting for the whole reply.
@@ -179,7 +172,7 @@ class GlassesAudioManager(private val context: Context) {
         val a2dp = findA2dpDevice()
         Log.d(
             TAG,
-            "speak() → ${if (a2dp != null) "A2DP/glasses" else "phone speaker"} (${chunks.size} chunks)",
+            "speak() -> ${if (a2dp != null) "Bluetooth media" else "phone speaker"} (${chunks.size} chunks)",
         )
         if (USE_ELEVENLABS && elevenLabs.isConfigured) {
             val accepted =
@@ -236,17 +229,16 @@ class GlassesAudioManager(private val context: Context) {
      * Mic routing is intentionally a no-op here. SpeechRecognizer is implemented
      * by Google in a separate process and does not honor app-level
      * setCommunicationDevice(); switching audio mode to IN_COMMUNICATION also
-     * makes the recognizer go silent on most devices. Real glasses-mic capture
-     * needs AudioRecord + an on-device wake-word library (e.g. Porcupine), not
-     * SpeechRecognizer. Until that swap, we leave routing alone so the existing
-     * phone-mic path keeps working.
+     * makes the recognizer go silent on most devices. Until the app replaces
+     * SpeechRecognizer with AudioRecord + an on-device wake-word library, we
+     * leave routing alone so the phone-mic path keeps working.
      */
-    fun enableGlassesMic() {
-        Log.d(TAG, "enableGlassesMic() is a no-op (SpeechRecognizer ignores app routing)")
+    fun prepareSpeechInput() {
+        Log.d(TAG, "prepareSpeechInput() is a no-op (SpeechRecognizer ignores app routing)")
     }
 
-    fun disableGlassesMic() {
-        // No-op — pairs with enableGlassesMic above.
+    fun releaseSpeechInput() {
+        // No-op — pairs with prepareSpeechInput above.
     }
 
     private fun findA2dpDevice(): AudioDeviceInfo? {
@@ -272,14 +264,14 @@ class GlassesAudioManager(private val context: Context) {
     private fun refreshStatus() {
         val mic = findScoDevice() != null
         val speaker = findA2dpDevice() != null
-        _glassesAudioStatus.value =
+        _audioRouteStatus.value =
             when {
                 mic && speaker -> AudioStatus.FULL
                 speaker -> AudioStatus.SPEAKER_ONLY
                 mic -> AudioStatus.MIC_ONLY
                 else -> AudioStatus.NONE
             }
-        Log.d(TAG, "Audio route status: ${_glassesAudioStatus.value}")
+        Log.d(TAG, "Audio route status: ${_audioRouteStatus.value}")
     }
 
     fun shutdown() {
@@ -292,7 +284,7 @@ class GlassesAudioManager(private val context: Context) {
         } catch (_: Exception) {}
         tts = null
         ttsReady = false
-        disableGlassesMic()
+        releaseSpeechInput()
         try {
             audioManager.unregisterAudioDeviceCallback(deviceCallback)
         } catch (_: Exception) {}

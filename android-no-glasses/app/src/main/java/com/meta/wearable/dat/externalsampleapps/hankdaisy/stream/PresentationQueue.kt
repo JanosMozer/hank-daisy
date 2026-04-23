@@ -56,7 +56,7 @@ internal class PresentationQueue(
 ) {
 
   private companion object {
-    private const val TAG = "DAT:STREAM:PresentationQueue"
+    private const val TAG = "HankDaisy:PresentationQueue"
     private const val PRESENTATION_THREAD = "PresentationThread"
 
     // Default 100ms buffer delay - balances latency vs smoothness

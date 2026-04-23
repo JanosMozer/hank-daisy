@@ -9,6 +9,17 @@ By integrating this SDK, developers can reliably connect to Meta's AI glasses an
 The Wearables Device Access Toolkit is in developer preview.
 Developers can access our SDK and documentation, test on supported AI glasses, and create organizations and release channels to share with test users.
 
+## HankDaisy Project Layout
+
+This repo now carries two Android app variants:
+
+| Folder | Camera source | External requirements | Use it when |
+|--------|---------------|-----------------------|-------------|
+| `android/` | Meta glasses through the Meta Wearables DAT SDK | Meta AI app, DAT registration, Camera permission for the glasses, and GitHub Packages access for DAT dependencies | You want the original glasses-connected HankDaisy app. |
+| `android-no-glasses/` | Android system camera through CameraX | Normal Android camera/microphone permissions only | You want the same HankDaisy demos without pairing Meta glasses. |
+
+The no-glasses variant keeps the Hank voice loop, chats, repair orders, summaries, exports, reports, and photo capture flow, but replaces the glasses stream with the phone camera. See [`android-no-glasses/README.md`](android-no-glasses/README.md) for its build command and local model/TTS configuration.
+
 ## Documentation & Community
 
 Find our full [developer documentation](https://wearables.developer.meta.com/docs/develop/) on the Wearables Developer Center.

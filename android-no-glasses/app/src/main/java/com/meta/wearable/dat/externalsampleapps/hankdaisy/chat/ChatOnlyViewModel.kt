@@ -18,7 +18,7 @@ import androidx.lifecycle.viewModelScope
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.BargeInDetector
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.ChatMessage
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GeminiService
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GlassesAudioManager
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.AudioRouteManager
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.VoiceCommandManager
 import java.io.File
 import java.io.FileOutputStream
@@ -33,8 +33,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Voice + text chat with Hank, with NO glasses stream and NO DAT SDK
- * involvement. Owns its own VoiceCommandManager / GlassesAudioManager /
+ * Voice + text chat with Hank, with no camera stream
+ * involvement. Owns its own VoiceCommandManager / AudioRouteManager /
  * BargeInDetector instances; phone mic in, phone speaker (or any active
  * Bluetooth audio) out.
  *
@@ -63,7 +63,7 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
     }
 
     private val voiceCommand = VoiceCommandManager(application)
-    private val glassesAudio = GlassesAudioManager(application)
+    private val audioRoute = AudioRouteManager(application)
     private val gemini = GeminiService()
 
     private val _uiState = MutableStateFlow(ChatOnlyUiState())
@@ -80,7 +80,7 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
         BargeInDetector(
             onUserSpeaking = {
                 viewModelScope.launch {
-                    glassesAudio.stopSpeaking()
+                    audioRoute.stopSpeaking()
                     voiceCommand.startConversationFollowUp()
                 }
             },
@@ -113,12 +113,12 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
             }
         speakingJob =
             viewModelScope.launch {
-                glassesAudio.isSpeaking.collect { speaking ->
+                audioRoute.isSpeaking.collect { speaking ->
                     _uiState.update { it.copy(isHankSpeaking = speaking) }
                     voiceCommand.setMuted(speaking)
                     if (speaking) {
                         delay(80)
-                        if (glassesAudio.isSpeaking.value) bargeInDetector.start()
+                        if (audioRoute.isSpeaking.value) bargeInDetector.start()
                     } else {
                         bargeInDetector.stop()
                         voiceCommand.startConversationFollowUp()
@@ -134,7 +134,7 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
         try { speakingJob?.cancel() } catch (_: Exception) {}
         try { analyzeJob?.cancel() } catch (_: Exception) {}
         try { bargeInDetector.stop() } catch (_: Exception) {}
-        try { glassesAudio.stopSpeaking() } catch (_: Exception) {}
+        try { audioRoute.stopSpeaking() } catch (_: Exception) {}
         try { voiceCommand.stopContinuousListening() } catch (_: Exception) {}
     }
 
@@ -254,7 +254,7 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
                     ChatMessage(ChatMessage.Role.ASSISTANT, response),
                 )
                 _uiState.update { it.copy(isAnalyzing = false) }
-                glassesAudio.speak(response)
+                audioRoute.speak(response)
             }
     }
 
@@ -268,7 +268,7 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         super.onCleared()
         stop()
-        try { glassesAudio.shutdown() } catch (_: Exception) {}
+        try { audioRoute.shutdown() } catch (_: Exception) {}
         try { voiceCommand.shutdown() } catch (_: Exception) {}
     }
 }

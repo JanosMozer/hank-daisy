@@ -6,10 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// NonStreamScreen - DAT Device Selection and Setup
+// NonStreamScreen - Phone Camera Setup
 //
-// This screen demonstrates DAT device management and pre-streaming setup. It handles device
-// registration status, camera permissions, and stream readiness.
+// This screen keeps the original setup flow while routing permissions to the phone camera.
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 
@@ -220,7 +219,7 @@ private fun GettingStartedSheetContent(onContinue: () -> Unit, modifier: Modifie
           text = stringResource(R.string.getting_started_tip_photo),
       )
       TipItem(
-          iconResId = R.drawable.smart_glasses_icon,
+          iconResId = R.drawable.camera_icon,
           text = stringResource(R.string.getting_started_tip_led),
       )
     }

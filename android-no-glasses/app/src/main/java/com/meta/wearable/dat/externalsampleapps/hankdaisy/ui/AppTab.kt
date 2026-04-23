@@ -17,9 +17,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * Bottom-nav destinations.
- *  - CONVOS  : entry point for a fresh live, glasses-mediated call.
+ *  - CONVOS  : entry point for a fresh live, phone-camera call.
  *  - CHATS   : library of past free-form sessions + "+" for a text/voice
- *              chat (no glasses). Order-linked sessions live inside each
+ *              chat. Order-linked sessions live inside each
  *              order rather than here.
  *  - ORDERS  : repair orders — the primary workspace for the shop pivot.
  *              Replaces the former TIPS tab; tip content moves to Settings.

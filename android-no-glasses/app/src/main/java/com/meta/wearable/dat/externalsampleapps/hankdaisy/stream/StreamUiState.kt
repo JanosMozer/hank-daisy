@@ -6,9 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// StreamUiState - DAT Camera Streaming UI State
+// StreamUiState - Phone Camera Streaming UI State
 //
-// This data class manages UI state for camera streaming operations using the DAT API.
+// This data class manages UI state for phone-camera streaming operations.
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
 
@@ -28,7 +28,7 @@ data class StreamUiState(
     val isHankSpeaking: Boolean = false,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
-    val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.FULL,
+    val audioRouteStatus: AudioRouteManager.AudioStatus = AudioRouteManager.AudioStatus.FULL,
     val chatMessages: List<ChatMessage> = emptyList(),
 )
 

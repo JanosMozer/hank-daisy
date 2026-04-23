@@ -164,7 +164,7 @@ fun ConvosScreen(
             }
         }
 
-        // "Starting camera…" pill above the button while we wait for DAT.
+        // "Starting camera…" pill above the button while the CameraX stream starts.
         if (starting && !timedOut) {
             Box(
                 modifier =

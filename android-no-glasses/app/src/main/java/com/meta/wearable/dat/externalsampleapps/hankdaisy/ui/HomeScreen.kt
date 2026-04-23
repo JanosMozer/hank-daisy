@@ -6,9 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// HomeScreen - DAT Registration Entry Point
+// HomeScreen - No-glasses Entry Point
 //
-// This screen handles DAT device registration.
+// This screen introduces the phone-camera build.
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 
@@ -81,7 +81,7 @@ fun HomeScreen(
           modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
       ) {
         TipItem(
-            iconResId = R.drawable.smart_glasses_icon,
+            iconResId = R.drawable.camera_icon,
             title = stringResource(R.string.home_tip_video_title),
             text = stringResource(R.string.home_tip_video),
         )

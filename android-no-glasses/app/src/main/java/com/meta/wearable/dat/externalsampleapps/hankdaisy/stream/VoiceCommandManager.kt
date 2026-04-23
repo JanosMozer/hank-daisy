@@ -176,7 +176,7 @@ class VoiceCommandManager(private val context: Context) {
     }
 
     /**
-     * Pause/resume the recognizer while TTS is speaking through the glasses, so
+     * Pause/resume the recognizer while TTS is speaking, so
      * Hank's own reply doesn't re-trigger the wake word (audio feedback loop).
      */
     fun setMuted(muted: Boolean) {

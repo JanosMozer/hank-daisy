@@ -6,9 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// WearablesUiState - DAT API State Management
+// WearablesUiState - No-glasses app state management
 //
-// This data class aggregates DAT API state for the UI layer
+// This data class preserves the original app's state shape for the UI layer.
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables
 

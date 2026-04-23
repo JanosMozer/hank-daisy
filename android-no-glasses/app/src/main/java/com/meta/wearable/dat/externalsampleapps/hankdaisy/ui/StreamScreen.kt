@@ -6,10 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// StreamScreen - DAT Camera Streaming UI
+// StreamScreen - Phone Camera Streaming UI
 //
-// This composable demonstrates the main streaming UI for DAT camera functionality. It shows how to
-// display live video from wearable devices and handle photo capture.
+// Displays live video from the system camera and handles photo capture.
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 

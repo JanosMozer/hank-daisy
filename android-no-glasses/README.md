@@ -2,6 +2,8 @@
 
 Android clone of the HankDaisy app that uses the phone camera instead of Meta glasses.
 
+Use this folder when you want to run HankDaisy without DAT registration, Meta AI pairing, or physical glasses. The original glasses-connected Android app remains in `../android`.
+
 ## What This Build Does
 
 - Uses the Android system camera as Hank's live visual context

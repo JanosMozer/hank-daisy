@@ -48,7 +48,7 @@ import java.util.Locale
  */
 /**
  * Chats tab — past sessions + a purple "+" FAB to start a new
- * text/voice chat (no glasses). The glasses-stream entry point
+ * text/voice chat. The phone-camera stream entry point
  * lives in ConvosScreen.
  */
 @Composable
@@ -140,8 +140,8 @@ fun SessionsHomeScreen(
             }
         }
 
-        // Single purple FAB: start a new text/voice chat (no glasses).
-        // The glasses stream entry point lives in the Convos tab.
+        // Single purple FAB: start a new text/voice chat.
+        // The phone-camera stream entry point lives in the Convos tab.
         Box(
             modifier =
                 Modifier

@@ -90,7 +90,7 @@ class StreamViewModel(
 
   private val liveStreamServer = LiveStreamServer(8080)
   private val geminiService = GeminiService()
-  private val audio = GlassesAudioManager(application)
+  private val audio = AudioRouteManager(application)
   private val voiceCommand = VoiceCommandManager(application)
   private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
