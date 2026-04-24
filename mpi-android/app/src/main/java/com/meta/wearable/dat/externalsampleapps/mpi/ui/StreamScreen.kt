@@ -55,6 +55,7 @@ import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.GlassesAudioManager
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.StreamViewModel
 import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
+import java.util.Locale
 
 @Composable
 fun StreamScreen(
@@ -79,6 +80,7 @@ fun StreamScreen(
   DisposableEffect(Unit) {
     streamViewModel.startStream()
     onDispose {
+      streamViewModel.finalizePendingEvidenceCapture()
       // Capture the conversation BEFORE stopStream() wipes it, so we can
       // save it as a Session on the home screen.
       val snapshot = streamViewModel.uiState.value.chatMessages
@@ -131,6 +133,24 @@ fun StreamScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 140.dp),
     )
+
+    if (streamUiState.isAudioRecording) {
+      Box(
+          modifier = Modifier
+              .align(Alignment.BottomCenter)
+              .padding(bottom = 188.dp)
+              .background(Color(0xCC111827), shape = RoundedCornerShape(999.dp))
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
+        Text(
+            text =
+                "Recording audio evidence • ${formatDuration(streamUiState.audioRecordingDurationMs)}",
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+      }
+    }
 
     // Glasses audio routing banner — warns the mechanic if the glasses
     // aren't paired as a Bluetooth headset (so I/O falls back to the phone).
@@ -212,6 +232,11 @@ fun StreamScreen(
         ClipButton(
             onClick = { streamViewModel.saveClipEvidence() },
         )
+
+        AudioEvidenceButton(
+            isRecording = streamUiState.isAudioRecording,
+            onClick = { streamViewModel.toggleAudioEvidenceRecording() },
+        )
       }
     }
   }
@@ -228,4 +253,11 @@ fun StreamScreen(
       )
     }
   }
+}
+
+private fun formatDuration(durationMs: Long): String {
+  val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+  val minutes = totalSeconds / 60L
+  val seconds = totalSeconds % 60L
+  return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }

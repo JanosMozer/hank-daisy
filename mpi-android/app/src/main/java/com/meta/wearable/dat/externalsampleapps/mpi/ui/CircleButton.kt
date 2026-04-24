@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,6 +61,17 @@ fun ClipButton(onClick: () -> Unit) {
         imageVector = Icons.Filled.FiberManualRecord,
         contentDescription = "Save clip evidence",
         tint = Color.Red,
+    )
+  }
+}
+
+@Composable
+fun AudioEvidenceButton(isRecording: Boolean, onClick: () -> Unit) {
+  CircleButton(onClick = onClick) {
+    Icon(
+        imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
+        contentDescription = if (isRecording) "Stop audio evidence" else "Record audio evidence",
+        tint = if (isRecording) Color.Red else Color.Black,
     )
   }
 }

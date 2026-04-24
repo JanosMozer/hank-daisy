@@ -612,6 +612,8 @@ private fun EvidencePreviewRow(evidenceAssets: List<InspectionEvidence>) {
                         text = when {
                             asset.kind == com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind.VIDEO && asset.clipFramePaths.isNotEmpty() ->
                                 "Clip preview"
+                            asset.kind == com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind.AUDIO ->
+                                "Audio note"
                             asset.kind == com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind.IMAGE -> "Image evidence"
                             else -> asset.kind.name
                         },

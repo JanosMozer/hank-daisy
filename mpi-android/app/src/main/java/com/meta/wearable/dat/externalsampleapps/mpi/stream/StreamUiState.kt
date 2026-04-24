@@ -27,6 +27,8 @@ data class StreamUiState(
     val isListening: Boolean = false,
     val isWakeWordActive: Boolean = false,
     val isHankSpeaking: Boolean = false,
+    val isAudioRecording: Boolean = false,
+    val audioRecordingDurationMs: Long = 0L,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
     val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,

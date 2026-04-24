@@ -24,6 +24,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -108,6 +109,10 @@ class StreamViewModel(
   private var analyzeJob: Job? = null
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
+  private var audioEvidenceRecorder: MediaRecorder? = null
+  private var audioEvidenceFile: File? = null
+  private var audioEvidenceStartedAt: Long = 0L
+  private var audioEvidenceTickerJob: Job? = null
   private val rollingClipFrames = ArrayDeque<ClipFrameSample>()
   private var lastClipFrameAt = 0L
 
@@ -494,6 +499,11 @@ class StreamViewModel(
     sessionStateJob = null
     try { presentationQueue?.stop() } catch (_: Exception) {}
     presentationQueue = null
+    try { audioEvidenceTickerJob?.cancel() } catch (_: Exception) {}
+    audioEvidenceTickerJob = null
+    releaseAudioEvidenceRecorder()
+    audioEvidenceFile = null
+    audioEvidenceStartedAt = 0L
     clearDraftChat()
     _uiState.update { INITIAL_STATE }
     try { stream?.stop() } catch (e: Exception) { Log.w(TAG, "stream?.stop() in stopStream", e) }
@@ -717,6 +727,146 @@ class StreamViewModel(
       _uiState.update { it.copy(capturedEvidence = it.capturedEvidence + evidence) }
     } catch (e: Exception) {
       Log.e(TAG, "Failed to save clip evidence", e)
+    }
+  }
+
+  fun toggleAudioEvidenceRecording() {
+    if (_uiState.value.isAudioRecording) {
+      stopAudioEvidenceRecording()
+    } else {
+      startAudioEvidenceRecording()
+    }
+  }
+
+  fun finalizePendingEvidenceCapture() {
+    if (_uiState.value.isAudioRecording) {
+      stopAudioEvidenceRecording()
+    }
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun startAudioEvidenceRecording() {
+    if (_uiState.value.isAudioRecording) return
+    if (_uiState.value.streamSessionState != StreamSessionState.STREAMING) {
+      Log.d(TAG, "startAudioEvidenceRecording(): stream is not active")
+      return
+    }
+    val app = getApplication<Application>()
+    val startedAt = System.currentTimeMillis()
+    val dir = File(app.cacheDir, "inspection-evidence").apply { mkdirs() }
+    val file = File(dir, "finding-audio-$startedAt.m4a")
+    try {
+      val recorder =
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(app)
+          } else {
+            @Suppress("DEPRECATION")
+            MediaRecorder()
+          }
+      recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+      recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+      recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+      recorder.setAudioEncodingBitRate(128000)
+      recorder.setAudioSamplingRate(44100)
+      recorder.setOutputFile(file.absolutePath)
+      recorder.prepare()
+      recorder.start()
+      audioEvidenceRecorder = recorder
+      audioEvidenceFile = file
+      audioEvidenceStartedAt = startedAt
+      audioEvidenceTickerJob?.cancel()
+      audioEvidenceTickerJob =
+          viewModelScope.launch {
+            while (isActive) {
+              _uiState.update {
+                it.copy(
+                    isAudioRecording = true,
+                    audioRecordingDurationMs =
+                        (System.currentTimeMillis() - audioEvidenceStartedAt).coerceAtLeast(0L),
+                )
+              }
+              delay(250L)
+            }
+          }
+      _uiState.update { it.copy(isAudioRecording = true, audioRecordingDurationMs = 0L) }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to start audio evidence recording", e)
+      audioEvidenceTickerJob?.cancel()
+      audioEvidenceTickerJob = null
+      releaseAudioEvidenceRecorder()
+      audioEvidenceFile = null
+      audioEvidenceStartedAt = 0L
+      runCatching { file.delete() }
+      _uiState.update { it.copy(isAudioRecording = false, audioRecordingDurationMs = 0L) }
+    }
+  }
+
+  private fun stopAudioEvidenceRecording() {
+    val recorder = audioEvidenceRecorder
+    val file = audioEvidenceFile
+    val startedAt = audioEvidenceStartedAt
+    if (recorder == null || file == null || startedAt == 0L) {
+      audioEvidenceTickerJob?.cancel()
+      audioEvidenceTickerJob = null
+      releaseAudioEvidenceRecorder()
+      audioEvidenceFile = null
+      audioEvidenceStartedAt = 0L
+      _uiState.update { it.copy(isAudioRecording = false, audioRecordingDurationMs = 0L) }
+      return
+    }
+
+    audioEvidenceTickerJob?.cancel()
+    audioEvidenceTickerJob = null
+
+    val durationMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
+    var savedEvidence: InspectionEvidence? = null
+    try {
+      recorder.stop()
+      if (file.exists() && file.length() > 0L) {
+        savedEvidence =
+            InspectionEvidence(
+                id = "evidence-audio-$startedAt",
+                kind = EvidenceKind.AUDIO,
+                filePath = file.absolutePath,
+                createdAt = startedAt,
+                caption = "Narrated finding audio",
+                durationMs = durationMs,
+            )
+      } else {
+        runCatching { file.delete() }
+      }
+    } catch (e: RuntimeException) {
+      Log.w(TAG, "Audio evidence stop failed; dropping partial file", e)
+      runCatching { file.delete() }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to finalize audio evidence recording", e)
+      runCatching { file.delete() }
+    } finally {
+      releaseAudioEvidenceRecorder()
+      audioEvidenceFile = null
+      audioEvidenceStartedAt = 0L
+    }
+
+    _uiState.update {
+      it.copy(
+          isAudioRecording = false,
+          audioRecordingDurationMs = 0L,
+          capturedEvidence =
+              if (savedEvidence != null) it.capturedEvidence + savedEvidence else it.capturedEvidence,
+      )
+    }
+  }
+
+  private fun releaseAudioEvidenceRecorder() {
+    val recorder = audioEvidenceRecorder
+    audioEvidenceRecorder = null
+    if (recorder != null) {
+      try {
+        recorder.reset()
+      } catch (_: Exception) {}
+      try {
+        recorder.release()
+      } catch (_: Exception) {}
     }
   }
 
