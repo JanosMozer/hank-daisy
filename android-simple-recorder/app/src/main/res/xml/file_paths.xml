@@ -2,4 +2,6 @@
 <paths>
     <cache-path name="shared_images" path="images/"/>
     <cache-path name="shared_sessions" path="sessions/"/>
+    <external-files-path name="movies" path="Movies/" />
+    <files-path name="internal_files" path="." />
 </paths>

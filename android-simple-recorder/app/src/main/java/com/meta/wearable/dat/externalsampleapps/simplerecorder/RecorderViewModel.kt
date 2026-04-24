@@ -31,12 +31,31 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import java.io.File
 
 enum class RecorderMode {
   IDLE,
   RECORDING,
   PAUSED,
   SAVING,
+}
+
+data class SavedRecording(
+    val name: String,
+    val absolutePath: String,
+    val modifiedAt: Long,
+    val sizeBytes: Long,
+) 
+{
+  val sizeLabel: String
+    get() {
+      val kib = sizeBytes / 1024.0
+      return if (kib >= 1024.0) {
+        String.format("%.1f MB", kib / 1024.0)
+      } else {
+        String.format("%.0f KB", kib)
+      }
+    }
 }
 
 data class RecorderUiState(
@@ -52,6 +71,7 @@ data class RecorderUiState(
     val activeRecordingName: String? = null,
     val lastSavedName: String? = null,
     val elapsedRecordingMs: Long = 0L,
+    val recordings: List<SavedRecording> = emptyList(),
 ) {
   val canRegister: Boolean =
       hasAndroidPermissions &&
@@ -76,6 +96,7 @@ data class RecorderUiState(
 
   val canPause: Boolean = recorderMode == RecorderMode.RECORDING
   val canSave: Boolean = recorderMode == RecorderMode.RECORDING || recorderMode == RecorderMode.PAUSED
+  val canShareLatest: Boolean = recordings.isNotEmpty() && recorderMode != RecorderMode.SAVING
 
   val recorderLabel: String =
       when (recorderMode) {
@@ -107,6 +128,9 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
 
   private val deviceSelector: DeviceSelector = AutoDeviceSelector()
   private val frameRecorder = FrameRecorder(application.applicationContext)
+  private val moviesDir: File =
+      application.applicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES)
+          ?: application.filesDir
 
   private val _uiState = MutableStateFlow(RecorderUiState())
   val uiState: StateFlow<RecorderUiState> = _uiState.asStateFlow()
@@ -135,6 +159,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
       )
     }
     if (granted) {
+      refreshSavedRecordings()
       startMonitoring()
     }
   }
@@ -416,6 +441,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             status = "Saved recording.",
         )
       }
+      refreshSavedRecordings()
     }
   }
 
@@ -454,6 +480,41 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
   private fun stopTimer() {
     timerJob?.cancel()
     timerJob = null
+  }
+
+  fun latestRecordingPath(): String? = _uiState.value.recordings.firstOrNull()?.absolutePath
+
+  fun deleteRecording(path: String) {
+    val file = File(path)
+    if (!file.exists()) return
+    val deleted = file.delete()
+    _uiState.update {
+      it.copy(
+          status =
+              if (deleted) "Deleted ${file.name}."
+              else "Could not delete ${file.name}.",
+          lastSavedPath = if (it.lastSavedPath == path) null else it.lastSavedPath,
+          lastSavedName = if (it.lastSavedPath == path) null else it.lastSavedName,
+      )
+    }
+    refreshSavedRecordings()
+  }
+
+  private fun refreshSavedRecordings() {
+    val files =
+        moviesDir.listFiles()
+            ?.filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
+            ?.sortedByDescending { it.lastModified() }
+            ?.map {
+              SavedRecording(
+                  name = it.name,
+                  absolutePath = it.absolutePath,
+                  modifiedAt = it.lastModified(),
+                  sizeBytes = it.length(),
+              )
+            }
+            .orEmpty()
+    _uiState.update { it.copy(recordings = files) }
   }
 
   override fun onCleared() {

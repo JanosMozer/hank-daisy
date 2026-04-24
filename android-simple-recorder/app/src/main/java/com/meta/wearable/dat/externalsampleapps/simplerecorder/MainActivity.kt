@@ -5,8 +5,10 @@ import android.Manifest.permission.BLUETOOTH_CONNECT
 import android.Manifest.permission.CAMERA
 import android.Manifest.permission.INTERNET
 import android.Manifest.permission.POST_NOTIFICATIONS
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import androidx.core.content.FileProvider
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,10 +16,12 @@ import androidx.activity.result.contract.ActivityResultContracts.RequestMultiple
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -28,8 +32,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -47,6 +55,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -111,6 +123,11 @@ class MainActivity : ComponentActivity() {
           onRecord = { viewModel.startOrResumeRecording() },
           onPause = { viewModel.pauseRecording() },
           onSave = { viewModel.saveRecording() },
+          onShareLatest = {
+            viewModel.latestRecordingPath()?.let { shareRecording(it) }
+          },
+          onShareRecording = { shareRecording(it) },
+          onDeleteRecording = { viewModel.deleteRecording(it) },
       )
     }
   }
@@ -124,6 +141,20 @@ class MainActivity : ComponentActivity() {
     super.onStop()
     viewModel.flushRecording()
   }
+
+  private fun shareRecording(path: String) {
+    val file = File(path)
+    if (!file.exists()) return
+    val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+    val shareIntent =
+        Intent(Intent.ACTION_SEND).apply {
+          type = "video/mp4"
+          putExtra(Intent.EXTRA_STREAM, uri)
+          putExtra(Intent.EXTRA_SUBJECT, file.name)
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    startActivity(Intent.createChooser(shareIntent, "Share recording"))
+  }
 }
 
 @Composable
@@ -134,6 +165,9 @@ private fun RecorderApp(
     onRecord: () -> Unit,
     onPause: () -> Unit,
     onSave: () -> Unit,
+    onShareLatest: () -> Unit,
+    onShareRecording: (String) -> Unit,
+    onDeleteRecording: (String) -> Unit,
 ) {
   Surface(color = Color(0xFF0B0B0C), modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -178,6 +212,9 @@ private fun RecorderApp(
           }
           if (state.canConnect) {
             Button(onClick = onConnect) { Text("Connect") }
+          }
+          if (state.canShareLatest) {
+            OutlinedButton(onClick = onShareLatest) { Text("Share latest") }
           }
         }
       }
@@ -274,6 +311,82 @@ private fun RecorderApp(
         }
         Spacer(modifier = Modifier.height(4.dp))
       }
+
+      Text(
+          text = "Saved recordings",
+          color = Color.White,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+      )
+      if (state.recordings.isEmpty()) {
+        Text(
+            text = "No saved recordings yet.",
+            color = Color.White.copy(alpha = 0.65f),
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+      } else {
+        LazyColumn(
+            modifier =
+                Modifier.fillMaxWidth()
+                    .height(160.dp)
+                    .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          items(state.recordings, key = { it.absolutePath }) { recording ->
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+                        .clickable { onShareRecording(recording.absolutePath) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = recording.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "${formatRecordingTime(recording.modifiedAt)}  •  ${recording.sizeLabel}",
+                    color = Color.White.copy(alpha = 0.62f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+              }
+              Row(
+                  horizontalArrangement = Arrangement.spacedBy(4.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+              ) {
+                TextButton(onClick = { onShareRecording(recording.absolutePath) }) {
+                  Text(
+                      text = "Share",
+                      color = Color(0xFF8AE6A3),
+                      style = MaterialTheme.typography.bodySmall,
+                      fontWeight = FontWeight.SemiBold,
+                  )
+                }
+                TextButton(onClick = { onDeleteRecording(recording.absolutePath) }) {
+                  Text(
+                      text = "Delete",
+                      color = Color(0xFFFF8A8A),
+                      style = MaterialTheme.typography.bodySmall,
+                      fontWeight = FontWeight.SemiBold,
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
+}
+
+private fun formatRecordingTime(timestamp: Long): String {
+  return SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(timestamp))
 }
