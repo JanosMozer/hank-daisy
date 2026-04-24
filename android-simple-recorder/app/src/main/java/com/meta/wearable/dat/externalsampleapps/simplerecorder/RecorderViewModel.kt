@@ -3,7 +3,9 @@ package com.meta.wearable.dat.externalsampleapps.simplerecorder
 import android.app.Activity
 import android.app.Application
 import android.graphics.Bitmap
+import android.media.ThumbnailUtils
 import android.os.SystemClock
+import android.util.Size
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -45,8 +47,8 @@ data class SavedRecording(
     val absolutePath: String,
     val modifiedAt: Long,
     val sizeBytes: Long,
-) 
-{
+    val thumbnail: Bitmap? = null,
+) {
   val sizeLabel: String
     get() {
       val kib = sizeBytes / 1024.0
@@ -159,7 +161,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
       )
     }
     if (granted) {
-      refreshSavedRecordings()
+      refreshSavedRecordingsAsync()
       startMonitoring()
     }
   }
@@ -441,7 +443,7 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
             status = "Saved recording.",
         )
       }
-      refreshSavedRecordings()
+      refreshSavedRecordingsAsync()
     }
   }
 
@@ -497,24 +499,38 @@ class RecorderViewModel(application: Application) : AndroidViewModel(application
           lastSavedName = if (it.lastSavedPath == path) null else it.lastSavedName,
       )
     }
-    refreshSavedRecordings()
+    refreshSavedRecordingsAsync()
   }
 
-  private fun refreshSavedRecordings() {
-    val files =
-        moviesDir.listFiles()
-            ?.filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
-            ?.sortedByDescending { it.lastModified() }
-            ?.map {
-              SavedRecording(
-                  name = it.name,
-                  absolutePath = it.absolutePath,
-                  modifiedAt = it.lastModified(),
-                  sizeBytes = it.length(),
-              )
-            }
-            .orEmpty()
-    _uiState.update { it.copy(recordings = files) }
+  private fun refreshSavedRecordingsAsync() {
+    viewModelScope.launch(Dispatchers.IO) {
+      val files =
+          moviesDir.listFiles()
+              ?.filter { it.isFile && it.extension.equals("mp4", ignoreCase = true) }
+              ?.sortedByDescending { it.lastModified() }
+              ?.map { file ->
+                SavedRecording(
+                    name = file.name,
+                    absolutePath = file.absolutePath,
+                    modifiedAt = file.lastModified(),
+                    sizeBytes = file.length(),
+                    thumbnail = buildThumbnail(file),
+                )
+              }
+              .orEmpty()
+      withContext(Dispatchers.Main) {
+        _uiState.update { it.copy(recordings = files) }
+      }
+    }
+  }
+
+  private fun buildThumbnail(file: File): Bitmap? {
+    return try {
+      ThumbnailUtils.createVideoThumbnail(file, Size(160, 90), null)
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not create thumbnail for ${file.name}", e)
+      null
+    }
   }
 
   override fun onCleared() {

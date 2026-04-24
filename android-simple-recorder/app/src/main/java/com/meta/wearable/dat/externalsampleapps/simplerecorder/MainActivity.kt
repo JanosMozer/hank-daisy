@@ -17,7 +17,6 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +27,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -340,11 +341,32 @@ private fun RecorderApp(
                 modifier =
                     Modifier.fillMaxWidth()
                         .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
-                        .clickable { onShareRecording(recording.absolutePath) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+              Box(
+                  modifier =
+                      Modifier.width(88.dp)
+                          .height(56.dp)
+                          .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp)),
+                  contentAlignment = Alignment.Center,
+              ) {
+                if (recording.thumbnail != null) {
+                  Image(
+                      bitmap = recording.thumbnail.asImageBitmap(),
+                      contentDescription = recording.name,
+                      modifier = Modifier.fillMaxSize(),
+                      contentScale = ContentScale.Crop,
+                  )
+                } else {
+                  Text(
+                      text = "No preview",
+                      color = Color.White.copy(alpha = 0.5f),
+                      style = MaterialTheme.typography.bodySmall,
+                  )
+                }
+              }
               Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = recording.name,
