@@ -67,7 +67,7 @@ fun OrderDetailScreen(
     order: RepairOrder,
     sessions: List<Session>,
     onBack: () -> Unit,
-    onStartDiagnosis: () -> Unit,
+    onStartDiagnosis: (String?) -> Unit,
     onOpenSession: (String) -> Unit,
     onUpdateOrder: (RepairOrder) -> Unit,
     onCloseOrder: () -> Unit,
@@ -96,7 +96,7 @@ fun OrderDetailScreen(
                     OverviewTab(
                         order = order,
                         sessionCount = sessions.size,
-                        onStartDiagnosis = onStartDiagnosis,
+                        onStartDiagnosis = { onStartDiagnosis(null) },
                         onCloseOrder = onCloseOrder,
                         onReopenOrder = onReopenOrder,
                         onDeleteOrder = onDeleteOrder,
@@ -107,6 +107,7 @@ fun OrderDetailScreen(
                         order = order,
                         sessions = sessions,
                         onOpenSession = onOpenSession,
+                        onStartDiagnosis = onStartDiagnosis,
                     )
                 DetailTab.NOTES ->
                     NotesTab(
@@ -299,7 +300,7 @@ private fun OverviewTab(
 
         if (onGenerateReport != null) {
             SecondaryButton(
-                label = "Generate inspection PDF",
+                label = "Generate inspection HTML",
                 onClick = onGenerateReport,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -333,6 +334,7 @@ private fun DiagnosisTab(
     order: RepairOrder,
     sessions: List<Session>,
     onOpenSession: (String) -> Unit,
+    onStartDiagnosis: (String?) -> Unit,
 ) {
     if (order.findings.isEmpty() && order.diagnoses.isEmpty() && sessions.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -363,7 +365,10 @@ private fun DiagnosisTab(
                 SectionHeader("Inspection findings")
             }
             items(order.findings, key = { it.id }) { finding ->
-                FindingCard(finding = finding)
+                FindingCard(
+                    finding = finding,
+                    onCapture = { onStartDiagnosis(finding.id) },
+                )
             }
             item { Spacer(Modifier.height(8.dp)) }
         }
@@ -484,7 +489,10 @@ private fun NotesTab(order: RepairOrder, onUpdateOrder: (RepairOrder) -> Unit) {
 }
 
 @Composable
-private fun FindingCard(finding: InspectionFinding) {
+private fun FindingCard(
+    finding: InspectionFinding,
+    onCapture: () -> Unit,
+) {
     val (bg, fg) =
         when (finding.severity) {
             FindingSeverity.GREEN ->
@@ -537,6 +545,21 @@ private fun FindingCard(finding: InspectionFinding) {
                 lineHeight = 18.sp,
             )
         }
+        if (finding.evidenceAssets.isNotEmpty() || finding.linkedSessionIds.isNotEmpty()) {
+            Text(
+                text =
+                    "${finding.evidenceAssets.size} media ${if (finding.evidenceAssets.size == 1) "file" else "files"} · " +
+                        "${finding.linkedSessionIds.size} linked ${if (finding.linkedSessionIds.size == 1) "session" else "sessions"}",
+                color = AppColors.TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        SecondaryButton(
+            label = "Capture evidence",
+            onClick = onCapture,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

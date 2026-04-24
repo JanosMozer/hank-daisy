@@ -42,6 +42,8 @@ data class SessionsUiState(
     /** Order a freshly saved session should be tagged to. Set when the user
      *  taps "Start diagnosis" inside an order; cleared after the next save. */
     val activeOrderId: String? = null,
+    /** Specific finding the next capture session should attach to, if any. */
+    val activeFindingId: String? = null,
     val currentTab: com.meta.wearable.dat.externalsampleapps.mpi.ui.AppTab =
         com.meta.wearable.dat.externalsampleapps.mpi.ui.AppTab.CHATS,
 )
@@ -135,6 +137,8 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
      *  as the session is persisted (one-shot), so a subsequent free-form
      *  session doesn't accidentally land on the same order. */
     fun setActiveOrder(id: String?) = _uiState.update { it.copy(activeOrderId = id) }
+    fun setActiveCaptureTarget(orderId: String?, findingId: String? = null) =
+        _uiState.update { it.copy(activeOrderId = orderId, activeFindingId = findingId) }
 
     fun createOrder(order: RepairOrder) {
         val stamped =
@@ -201,6 +205,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                 // If the user was viewing it, bounce them back.
                 viewingOrderId = if (state.viewingOrderId == id) null else state.viewingOrderId,
                 activeOrderId = if (state.activeOrderId == id) null else state.activeOrderId,
+                activeFindingId = if (state.activeOrderId == id) null else state.activeFindingId,
             )
         }
         persistOrders(_uiState.value.orders)
@@ -250,18 +255,29 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         persistProfile(profile)
     }
 
-    fun saveStreamSession(messages: List<ChatMessage>) {
+    fun saveStreamSession(
+        messages: List<ChatMessage>,
+        evidenceAssets: List<InspectionEvidence> = emptyList(),
+    ) {
         if (messages.isEmpty()) return
         // If the user started this session from inside an open order, tag it
         // — this is how "sessions on this order" gets populated. Cleared
         // after save so the next free-form stream doesn't accidentally
         // attach to the same order.
         val activeOrder = _uiState.value.activeOrderId
-        val session = Session.from(messages, orderId = activeOrder)
+        val activeFinding = _uiState.value.activeFindingId
+        val session =
+            Session.from(
+                messages = messages,
+                orderId = activeOrder,
+                findingId = activeFinding,
+                evidenceAssets = evidenceAssets,
+            )
         _uiState.update { state ->
             state.copy(
                 sessions = listOf(session) + state.sessions,
                 activeOrderId = null,
+                activeFindingId = null,
             )
         }
         persistSessions(_uiState.value.sessions)
@@ -282,6 +298,11 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                             else o
                         },
                 )
+            }
+            if (activeFinding != null && evidenceAssets.isNotEmpty()) {
+                attachEvidenceToFinding(orderId, activeFinding, session.id, evidenceAssets)
+            } else if (activeFinding != null) {
+                attachEvidenceToFinding(orderId, activeFinding, session.id, emptyList())
             }
             persistOrders(_uiState.value.orders)
         }
@@ -453,7 +474,15 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             .put("title", s.title)
             .put("description", s.description)
             .put("messages", msgs)
-            .apply { if (s.orderId != null) put("orderId", s.orderId) }
+            .apply {
+                if (s.orderId != null) put("orderId", s.orderId)
+                if (s.findingId != null) put("findingId", s.findingId)
+                if (s.evidenceAssets.isNotEmpty()) {
+                    val evidenceArr = JSONArray()
+                    for (asset in s.evidenceAssets) evidenceArr.put(evidenceToJson(asset))
+                    put("evidenceAssets", evidenceArr)
+                }
+            }
     }
 
     private fun sessionFromJson(o: JSONObject): Session {
@@ -470,6 +499,9 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                     imagePath = mo.optString("imagePath", "").ifBlank { null },
                 )
             }
+        val evidenceArr = o.optJSONArray("evidenceAssets") ?: JSONArray()
+        val evidence =
+            (0 until evidenceArr.length()).map { evidenceFromJson(evidenceArr.getJSONObject(it)) }
         return Session(
             id = o.optString("id"),
             createdAt = o.optLong("createdAt", System.currentTimeMillis()),
@@ -477,6 +509,8 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             description = o.optString("description"),
             messages = msgs,
             orderId = o.optString("orderId", "").ifBlank { null },
+            findingId = o.optString("findingId", "").ifBlank { null },
+            evidenceAssets = evidence,
         )
     }
 
@@ -492,7 +526,11 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                     .put("measurement", f.measurement)
                     .put("recommendation", f.recommendation)
                     .put("severity", f.severity.name)
-                    .put("note", f.note),
+                    .put("note", f.note)
+                    .put("linkedSessionIds", JSONArray(f.linkedSessionIds))
+                    .put("evidenceAssets", JSONArray().apply {
+                        for (asset in f.evidenceAssets) put(evidenceToJson(asset))
+                    }),
             )
         }
         val diagnosesArr = JSONArray()
@@ -511,6 +549,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             .put("id", o.id)
             .put("createdAt", o.createdAt)
             .put("updatedAt", o.updatedAt)
+            .put("templateId", o.templateId)
             .put("repairOrderNumber", o.repairOrderNumber)
             .put("mileage", o.mileage)
             .put("advisorName", o.advisorName)
@@ -551,6 +590,16 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                             }
                             .getOrDefault(FindingSeverity.YELLOW),
                     note = f.optString("note"),
+                    linkedSessionIds =
+                        (f.optJSONArray("linkedSessionIds") ?: JSONArray()).let { ids ->
+                            (0 until ids.length()).map { ids.optString(it) }.filter { it.isNotBlank() }
+                        },
+                    evidenceAssets =
+                        (f.optJSONArray("evidenceAssets") ?: JSONArray()).let { evidence ->
+                            (0 until evidence.length()).map {
+                                evidenceFromJson(evidence.getJSONObject(it))
+                            }
+                        },
                 )
             }
         val arr = o.optJSONArray("diagnoses") ?: JSONArray()
@@ -572,6 +621,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             id = o.optString("id"),
             createdAt = o.optLong("createdAt", System.currentTimeMillis()),
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
+            templateId = o.optString("templateId", InspectionTemplates.DEFAULT_TEMPLATE.id),
             repairOrderNumber = o.optString("repairOrderNumber"),
             mileage = o.optString("mileage"),
             advisorName = o.optString("advisorName"),
@@ -588,7 +638,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             status =
                 runCatching { OrderStatus.valueOf(o.optString("status", "OPEN")) }
                     .getOrDefault(OrderStatus.OPEN),
-            findings = findings,
+            findings = if (findings.isEmpty()) InspectionTemplates.instantiate() else findings,
             diagnoses = diagnoses,
             closedAt = if (o.has("closedAt")) o.optLong("closedAt") else null,
             closeSummary = o.optString("closeSummary"),
@@ -596,32 +646,52 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun defaultInspectionFindings(): List<InspectionFinding> =
-        listOf(
-            InspectionFinding(
-                id = "finding-tires",
-                system = "Tires",
-                component = "Rear tires",
-                location = "Rear left / rear right",
-                measurement = "Pending tread depth",
-                recommendation = "Measure tread and document wear pattern",
-                severity = FindingSeverity.YELLOW,
-                note = "Capture evidence clip once measurement is visible.",
-            ),
-            InspectionFinding(
-                id = "finding-brakes",
-                system = "Brakes",
-                component = "Front pads",
-                measurement = "Pending pad thickness",
-                recommendation = "Inspect pad life and rotor condition",
-                severity = FindingSeverity.YELLOW,
-            ),
-            InspectionFinding(
-                id = "finding-battery",
-                system = "Battery",
-                component = "12V battery",
-                measurement = "Pending tester result",
-                recommendation = "Record health / voltage result",
-                severity = FindingSeverity.GREEN,
-            ),
+        InspectionTemplates.instantiate()
+
+    private fun evidenceToJson(asset: InspectionEvidence): JSONObject =
+        JSONObject()
+            .put("id", asset.id)
+            .put("kind", asset.kind.name)
+            .put("filePath", asset.filePath)
+            .put("createdAt", asset.createdAt)
+            .put("caption", asset.caption)
+
+    private fun evidenceFromJson(o: JSONObject): InspectionEvidence =
+        InspectionEvidence(
+            id = o.optString("id"),
+            kind =
+                runCatching { EvidenceKind.valueOf(o.optString("kind", "IMAGE")) }
+                    .getOrDefault(EvidenceKind.IMAGE),
+            filePath = o.optString("filePath"),
+            createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+            caption = o.optString("caption"),
         )
+
+    private fun attachEvidenceToFinding(
+        orderId: String,
+        findingId: String,
+        sessionId: String,
+        evidenceAssets: List<InspectionEvidence>,
+    ) {
+        _uiState.update { state ->
+            state.copy(
+                orders =
+                    state.orders.map { order ->
+                        if (order.id != orderId) return@map order
+                        order.copy(
+                            updatedAt = System.currentTimeMillis(),
+                            findings =
+                                order.findings.map { finding ->
+                                    if (finding.id != findingId) return@map finding
+                                    finding.copy(
+                                        linkedSessionIds =
+                                            (finding.linkedSessionIds + sessionId).distinct(),
+                                        evidenceAssets = finding.evidenceAssets + evidenceAssets,
+                                    )
+                                },
+                        )
+                    },
+            )
+        }
+    }
 }

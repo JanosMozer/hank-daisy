@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.camera.types.StreamSessionState
 import com.meta.wearable.dat.externalsampleapps.mpi.R
+import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.GlassesAudioManager
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.StreamViewModel
 import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
@@ -59,7 +60,11 @@ import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
 fun StreamScreen(
     wearablesViewModel: WearablesViewModel,
     modifier: Modifier = Modifier,
-    onSessionEnd: (List<com.meta.wearable.dat.externalsampleapps.mpi.stream.ChatMessage>) -> Unit = {},
+    onSessionEnd:
+        (
+            List<com.meta.wearable.dat.externalsampleapps.mpi.stream.ChatMessage>,
+            List<InspectionEvidence>,
+        ) -> Unit = { _, _ -> },
     streamViewModel: StreamViewModel =
         viewModel(
             factory =
@@ -77,7 +82,8 @@ fun StreamScreen(
       // Capture the conversation BEFORE stopStream() wipes it, so we can
       // save it as a Session on the home screen.
       val snapshot = streamViewModel.uiState.value.chatMessages
-      if (snapshot.isNotEmpty()) onSessionEnd(snapshot)
+      val evidence = streamViewModel.uiState.value.capturedEvidence
+      if (snapshot.isNotEmpty()) onSessionEnd(snapshot, evidence)
       streamViewModel.stopStream()
     }
   }

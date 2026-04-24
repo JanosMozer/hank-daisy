@@ -139,7 +139,9 @@ fun HankDaisyScaffold(
           uiState.isStreaming ->
               StreamScreen(
                   wearablesViewModel = viewModel,
-                  onSessionEnd = { sessionVm.saveStreamSession(it) },
+                  onSessionEnd = { messages, evidence ->
+                    sessionVm.saveStreamSession(messages, evidence)
+                  },
               )
           sessionState.chatOnlyOpen ->
               ChatOnlyScreen(
@@ -177,12 +179,8 @@ fun HankDaisyScaffold(
                   order = order,
                   sessions = orderSessions,
                   onBack = { sessionVm.closeOrderDetail() },
-                  onStartDiagnosis = {
-                    // Tag the next saved session to this order, then kick
-                    // off the glasses stream. When the stream ends we
-                    // land back here automatically because viewingOrderId
-                    // is still set.
-                    sessionVm.setActiveOrder(order.id)
+                  onStartDiagnosis = { findingId ->
+                    sessionVm.setActiveCaptureTarget(order.id, findingId)
                     viewModel.navigateToStreaming(onRequestWearablesPermission)
                   },
                   onOpenSession = { sessionVm.openSession(it) },
@@ -197,7 +195,7 @@ fun HankDaisyScaffold(
                       if (ctx != null) {
                         {
                           scope.launch {
-                            OrderReportPdf.generateAndShare(
+                            InspectionReportHtml.generateAndShare(
                                 context = ctx,
                                 order = order,
                                 sessions = orderSessions,

@@ -20,6 +20,7 @@ data class RepairOrder(
     val createdAt: Long,
     val updatedAt: Long,
     // MPI identity
+    val templateId: String = InspectionTemplates.DEFAULT_TEMPLATE.id,
     val repairOrderNumber: String = "",
     val mileage: String = "",
     val advisorName: String = "",
@@ -116,12 +117,28 @@ data class InspectionFinding(
     val recommendation: String = "",
     val severity: FindingSeverity = FindingSeverity.YELLOW,
     val note: String = "",
+    val linkedSessionIds: List<String> = emptyList(),
+    val evidenceAssets: List<InspectionEvidence> = emptyList(),
 )
 
 enum class FindingSeverity(val label: String) {
     GREEN("Green"),
     YELLOW("Yellow"),
     RED("Red"),
+}
+
+data class InspectionEvidence(
+    val id: String,
+    val kind: EvidenceKind,
+    val filePath: String,
+    val createdAt: Long,
+    val caption: String = "",
+)
+
+enum class EvidenceKind {
+    IMAGE,
+    VIDEO,
+    AUDIO,
 }
 
 /**

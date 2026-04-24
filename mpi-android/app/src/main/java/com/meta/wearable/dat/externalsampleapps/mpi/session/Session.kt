@@ -26,9 +26,16 @@ data class Session(
     val description: String,
     val messages: List<ChatMessage>,
     val orderId: String? = null,
+    val findingId: String? = null,
+    val evidenceAssets: List<InspectionEvidence> = emptyList(),
 ) {
     companion object {
-        fun from(messages: List<ChatMessage>, orderId: String? = null): Session {
+        fun from(
+            messages: List<ChatMessage>,
+            orderId: String? = null,
+            findingId: String? = null,
+            evidenceAssets: List<InspectionEvidence> = emptyList(),
+        ): Session {
             val firstUser = messages.firstOrNull { it.role == ChatMessage.Role.USER }
             val firstHank = messages.firstOrNull { it.role == ChatMessage.Role.ASSISTANT }
             val title =
@@ -46,6 +53,8 @@ data class Session(
                 description = description,
                 messages = messages,
                 orderId = orderId,
+                findingId = findingId,
+                evidenceAssets = evidenceAssets,
             )
         }
     }

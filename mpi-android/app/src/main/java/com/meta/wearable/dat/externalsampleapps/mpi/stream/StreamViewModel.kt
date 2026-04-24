@@ -33,6 +33,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.meta.wearable.dat.externalsampleapps.mpi.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind
+import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.camera.Stream
 import com.meta.wearable.dat.camera.addStream
 import com.meta.wearable.dat.camera.types.PhotoData
@@ -649,6 +651,28 @@ class StreamViewModel(
     } catch (_: Exception) {}
   }
 
+  private fun saveCapturedBitmap(bitmap: Bitmap): InspectionEvidence? {
+    return try {
+      val dir = File(getApplication<Application>().cacheDir, "inspection-evidence")
+      dir.mkdirs()
+      val ts = System.currentTimeMillis()
+      val file = File(dir, "finding-image-$ts.jpg")
+      FileOutputStream(file).use { out ->
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+      }
+      InspectionEvidence(
+          id = "evidence-$ts",
+          kind = EvidenceKind.IMAGE,
+          filePath = file.absolutePath,
+          createdAt = ts,
+          caption = "Captured from glasses stream",
+      )
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to save captured bitmap", e)
+      null
+    }
+  }
+
   /** Quick analyze without voice — uses default prompt. */
   fun analyzeCurrentFrame() {
     analyzeWithQuestion("What do you see? Identify any problems and tell me how to fix them step by step.")
@@ -813,7 +837,15 @@ class StreamViewModel(
             decodeHeic(byteArray, transform)
           }
         }
-    _uiState.update { it.copy(capturedPhoto = capturedPhoto, isShareDialogVisible = true) }
+    val evidence = saveCapturedBitmap(capturedPhoto)
+    _uiState.update {
+      it.copy(
+          capturedPhoto = capturedPhoto,
+          isShareDialogVisible = true,
+          capturedEvidence =
+              if (evidence != null) it.capturedEvidence + evidence else it.capturedEvidence,
+      )
+    }
   }
 
   // HEIC Decoding with EXIF transformation

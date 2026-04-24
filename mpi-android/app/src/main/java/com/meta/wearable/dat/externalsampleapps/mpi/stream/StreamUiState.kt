@@ -13,6 +13,7 @@
 package com.meta.wearable.dat.externalsampleapps.mpi.stream
 
 import android.graphics.Bitmap
+import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.camera.types.StreamSessionState
 
 data class StreamUiState(
@@ -30,6 +31,7 @@ data class StreamUiState(
     val lastGeminiResponse: String? = null,
     val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,
     val chatMessages: List<ChatMessage> = emptyList(),
+    val capturedEvidence: List<InspectionEvidence> = emptyList(),
 )
 
 data class ChatMessage(
