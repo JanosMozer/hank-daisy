@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,6 +48,17 @@ fun CaptureButton(onClick: () -> Unit) {
         imageVector = Icons.Filled.PhotoCamera,
         contentDescription = stringResource(R.string.capture_photo),
         tint = Color.Black,
+    )
+  }
+}
+
+@Composable
+fun ClipButton(onClick: () -> Unit) {
+  CircleButton(onClick = onClick) {
+    Icon(
+        imageVector = Icons.Filled.FiberManualRecord,
+        contentDescription = "Save clip evidence",
+        tint = Color.Red,
     )
   }
 }

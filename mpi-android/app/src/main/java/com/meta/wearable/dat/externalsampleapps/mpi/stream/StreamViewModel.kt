@@ -49,6 +49,7 @@ import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.session.Session
 import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -75,7 +76,15 @@ class StreamViewModel(
     private const val TAG = "HankDaisy:StreamViewModel"
     private val INITIAL_STATE = StreamUiState()
     private val SESSION_TERMINAL_STATES = setOf(StreamSessionState.CLOSED)
+    private const val CLIP_CAPTURE_INTERVAL_MS = 250L
+    private const val CLIP_MAX_FRAMES = 24
+    private const val CLIP_FPS = 4
   }
+
+  private data class ClipFrameSample(
+      val capturedAt: Long,
+      val jpegBytes: ByteArray,
+  )
 
   private val deviceSelector: DeviceSelector = wearablesViewModel.deviceSelector
   private var session: Session? = null
@@ -99,6 +108,8 @@ class StreamViewModel(
   private var analyzeJob: Job? = null
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
+  private val rollingClipFrames = ArrayDeque<ClipFrameSample>()
+  private var lastClipFrameAt = 0L
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
   @Volatile private var lastTurnAt: Long = 0L
@@ -666,10 +677,46 @@ class StreamViewModel(
           filePath = file.absolutePath,
           createdAt = ts,
           caption = "Captured from glasses stream",
+          previewImagePath = file.absolutePath,
       )
     } catch (e: Exception) {
       Log.e(TAG, "Failed to save captured bitmap", e)
       null
+    }
+  }
+
+  fun saveClipEvidence() {
+    val samples = rollingClipFrames.toList()
+    if (samples.size < 2) {
+      Log.d(TAG, "saveClipEvidence(): not enough frames buffered")
+      return
+    }
+    try {
+      val dir = File(getApplication<Application>().cacheDir, "inspection-evidence/clip-${System.currentTimeMillis()}")
+      dir.mkdirs()
+      val framePaths =
+          samples.mapIndexed { index, sample ->
+            val frameFile = File(dir, "frame-${index.toString().padStart(3, '0')}.jpg")
+            frameFile.writeBytes(sample.jpegBytes)
+            frameFile.absolutePath
+          }
+      val durationMs = (samples.last().capturedAt - samples.first().capturedAt).coerceAtLeast(0L)
+      val coverPath = framePaths.first()
+      val evidence =
+          InspectionEvidence(
+              id = "evidence-clip-${System.currentTimeMillis()}",
+              kind = EvidenceKind.VIDEO,
+              filePath = coverPath,
+              createdAt = System.currentTimeMillis(),
+              caption = "Glasses clip evidence",
+              previewImagePath = coverPath,
+              clipFramePaths = framePaths,
+              clipFps = CLIP_FPS,
+              durationMs = durationMs,
+          )
+      _uiState.update { it.copy(capturedEvidence = it.capturedEvidence + evidence) }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to save clip evidence", e)
     }
   }
 
@@ -818,8 +865,25 @@ class StreamViewModel(
           videoFrame.presentationTimeUs,
       )
       liveStreamServer.sendFrame(bitmap)
+      captureClipSample(bitmap)
     } else {
       Log.e(TAG, "Failed to convert YUV to bitmap")
+    }
+  }
+
+  private fun captureClipSample(bitmap: Bitmap) {
+    val now = System.currentTimeMillis()
+    if (now - lastClipFrameAt < CLIP_CAPTURE_INTERVAL_MS) return
+    lastClipFrameAt = now
+    try {
+      val out = ByteArrayOutputStream()
+      bitmap.compress(Bitmap.CompressFormat.JPEG, 78, out)
+      rollingClipFrames.addLast(ClipFrameSample(now, out.toByteArray()))
+      while (rollingClipFrames.size > CLIP_MAX_FRAMES) {
+        rollingClipFrames.removeFirst()
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "captureClipSample failed", e)
     }
   }
 

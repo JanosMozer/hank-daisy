@@ -201,6 +201,7 @@ object InspectionReportHtml {
                 .media-card { background: #0d1426; border-radius: 10px; padding: 10px; border: 1px solid #23304f; }
                 img, video, audio { width: 100%; border-radius: 8px; background: #000; }
                 audio { min-height: 42px; }
+                .clip-toggle { margin-top: 8px; background: #24385f; color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
                 details { margin-top: 12px; }
                 summary { cursor: pointer; color: #9fd0ff; }
                 .transcript p { margin-top: 8px; }
@@ -257,6 +258,29 @@ object InspectionReportHtml {
                     }
                 }
               </main>
+              <script>
+                document.querySelectorAll('.clip-player').forEach((player) => {
+                  const img = player.querySelector('.clip-frame');
+                  const button = player.querySelector('.clip-toggle');
+                  const frames = JSON.parse(player.querySelector('.clip-data').textContent);
+                  const fps = Number(player.dataset.fps || '4');
+                  let index = 0;
+                  let timer = null;
+                  button.addEventListener('click', () => {
+                    if (timer) {
+                      clearInterval(timer);
+                      timer = null;
+                      button.textContent = 'Play clip';
+                      return;
+                    }
+                    button.textContent = 'Pause clip';
+                    timer = setInterval(() => {
+                      index = (index + 1) % frames.length;
+                      img.src = frames[index];
+                    }, Math.max(80, Math.round(1000 / fps)));
+                  });
+                });
+              </script>
             </body>
             </html>
         """.trimIndent()
@@ -279,13 +303,34 @@ object InspectionReportHtml {
                           EvidenceKind.IMAGE ->
                               """<figure class="media-card"><img alt="$caption" src="$dataUri" /><figcaption class="muted">$caption</figcaption></figure>"""
                           EvidenceKind.VIDEO ->
-                              """<figure class="media-card"><video controls preload="metadata" src="$dataUri"></video><figcaption class="muted">$caption</figcaption></figure>"""
+                              if (asset.clipFramePaths.isNotEmpty()) {
+                                  renderClipPlayer(asset, caption)
+                              } else {
+                                  """<figure class="media-card"><video controls preload="metadata" src="$dataUri"></video><figcaption class="muted">$caption</figcaption></figure>"""
+                              }
                           EvidenceKind.AUDIO ->
                               """<figure class="media-card"><audio controls preload="metadata" src="$dataUri"></audio><figcaption class="muted">$caption</figcaption></figure>"""
                       }
                   }
               }
             </div>
+        """.trimIndent()
+    }
+
+    private fun renderClipPlayer(asset: InspectionEvidence, caption: String): String {
+        val frames =
+            asset.clipFramePaths.filter { File(it).exists() }.map { inlineDataUri(it) }
+        if (frames.isEmpty()) return ""
+        val frameJson = frames.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+        val first = frames.first()
+        val seconds = if (asset.durationMs > 0) String.format(Locale.US, "%.1fs", asset.durationMs / 1000.0) else ""
+        return """
+            <figure class="media-card clip-player" data-fps="${asset.clipFps.coerceAtLeast(1)}">
+              <img class="clip-frame" alt="$caption" src="$first" />
+              <button class="clip-toggle" type="button">Play clip</button>
+              <figcaption class="muted">$caption${if (seconds.isNotBlank()) " · $seconds" else ""}</figcaption>
+              <script type="application/json" class="clip-data">$frameJson</script>
+            </figure>
         """.trimIndent()
     }
 

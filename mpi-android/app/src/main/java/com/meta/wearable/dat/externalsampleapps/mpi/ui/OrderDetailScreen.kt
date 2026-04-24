@@ -8,6 +8,7 @@
 
 package com.meta.wearable.dat.externalsampleapps.mpi.ui
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -40,10 +42,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.mpi.session.FindingSeverity
+import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionFinding
 import com.meta.wearable.dat.externalsampleapps.mpi.session.OrderStatus
 import com.meta.wearable.dat.externalsampleapps.mpi.session.RepairOrder
@@ -555,11 +560,86 @@ private fun FindingCard(
                 fontWeight = FontWeight.SemiBold,
             )
         }
+        if (finding.evidenceAssets.isNotEmpty()) {
+            EvidencePreviewRow(finding.evidenceAssets)
+        }
         SecondaryButton(
             label = "Capture evidence",
             onClick = onCapture,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun EvidencePreviewRow(evidenceAssets: List<InspectionEvidence>) {
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth().height((evidenceAssets.size.coerceAtMost(2) * 96).dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(evidenceAssets, key = { it.id }) { asset ->
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(10.dp))
+                        .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val previewPath = asset.previewImagePath ?: asset.filePath
+                val bitmap = remember(previewPath) { previewPath.takeIf { it.isNotBlank() }?.let(BitmapFactory::decodeFile) }
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = asset.caption,
+                        modifier = Modifier.width(92.dp).height(64.dp).background(AppColors.Background, RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.width(92.dp).height(64.dp).background(AppColors.Background, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = asset.kind.name, color = AppColors.TextMuted, fontSize = 10.sp)
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = when {
+                            asset.kind == com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind.VIDEO && asset.clipFramePaths.isNotEmpty() ->
+                                "Clip preview"
+                            asset.kind == com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind.IMAGE -> "Image evidence"
+                            else -> asset.kind.name
+                        },
+                        color = AppColors.TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text =
+                            asset.caption.ifBlank {
+                                if (asset.durationMs > 0) "${String.format(Locale.US, "%.1fs", asset.durationMs / 1000.0)} clip"
+                                else "Captured evidence"
+                            },
+                        color = AppColors.TextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                    )
+                    if (asset.clipFramePaths.isNotEmpty()) {
+                        Text(
+                            text = "${asset.clipFramePaths.size} frames · ${asset.clipFps} fps",
+                            color = AppColors.TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

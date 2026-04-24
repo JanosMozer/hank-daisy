@@ -208,6 +208,10 @@ fun StreamScreen(
         CaptureButton(
             onClick = { streamViewModel.capturePhoto() },
         )
+
+        ClipButton(
+            onClick = { streamViewModel.saveClipEvidence() },
+        )
       }
     }
   }

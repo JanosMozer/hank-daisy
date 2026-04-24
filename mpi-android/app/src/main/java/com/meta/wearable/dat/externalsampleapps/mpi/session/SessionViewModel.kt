@@ -655,6 +655,10 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             .put("filePath", asset.filePath)
             .put("createdAt", asset.createdAt)
             .put("caption", asset.caption)
+            .put("previewImagePath", asset.previewImagePath)
+            .put("clipFramePaths", JSONArray(asset.clipFramePaths))
+            .put("clipFps", asset.clipFps)
+            .put("durationMs", asset.durationMs)
 
     private fun evidenceFromJson(o: JSONObject): InspectionEvidence =
         InspectionEvidence(
@@ -665,6 +669,13 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             filePath = o.optString("filePath"),
             createdAt = o.optLong("createdAt", System.currentTimeMillis()),
             caption = o.optString("caption"),
+            previewImagePath = o.optString("previewImagePath", "").ifBlank { null },
+            clipFramePaths =
+                (o.optJSONArray("clipFramePaths") ?: JSONArray()).let { arr ->
+                    (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
+                },
+            clipFps = o.optInt("clipFps", 0),
+            durationMs = o.optLong("durationMs", 0L),
         )
 
     private fun attachEvidenceToFinding(

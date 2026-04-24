@@ -133,6 +133,10 @@ data class InspectionEvidence(
     val filePath: String,
     val createdAt: Long,
     val caption: String = "",
+    val previewImagePath: String? = null,
+    val clipFramePaths: List<String> = emptyList(),
+    val clipFps: Int = 0,
+    val durationMs: Long = 0L,
 )
 
 enum class EvidenceKind {
