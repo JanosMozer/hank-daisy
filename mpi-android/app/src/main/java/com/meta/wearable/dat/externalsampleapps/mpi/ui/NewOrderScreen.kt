@@ -42,11 +42,7 @@ import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.mpi.session.RepairOrder
 
 /**
- * Full-screen form for creating a new repair order. We keep the visual
- * footprint simple — one vertical column, grouped by vehicle / customer /
- * issue, with outlined fields. No live validation; the only hard rule is
- * "at least one of vehicle/customer/issue must be set" so the card has
- * something to render on the list.
+ * Full-screen form for creating a new MPI inspection record.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +51,10 @@ fun NewOrderScreen(
     onCreate: (RepairOrder) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var repairOrderNumber by remember { mutableStateOf("") }
+    var mileage by remember { mutableStateOf("") }
+    var advisorName by remember { mutableStateOf("") }
+    var technicianName by remember { mutableStateOf("") }
     var vehicleYear by remember { mutableStateOf("") }
     var vehicleMake by remember { mutableStateOf("") }
     var vehicleModel by remember { mutableStateOf("") }
@@ -65,7 +65,8 @@ fun NewOrderScreen(
     var presentingIssue by remember { mutableStateOf("") }
 
     val canCreate =
-        listOf(vehicleMake, vehicleModel, customerName, presentingIssue).any { it.isNotBlank() }
+        listOf(repairOrderNumber, vehicleMake, vehicleModel, customerName, presentingIssue)
+            .any { it.isNotBlank() }
 
     Column(
         modifier =
@@ -92,7 +93,7 @@ fun NewOrderScreen(
                 modifier = Modifier.clickable(onClick = onCancel),
             )
             Text(
-                text = "New order",
+                text = "New inspection",
                 color = AppColors.TextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -106,6 +107,10 @@ fun NewOrderScreen(
                     Modifier.clickable(enabled = canCreate) {
                         val order =
                             RepairOrder.blank().copy(
+                                repairOrderNumber = repairOrderNumber.trim(),
+                                mileage = mileage.trim(),
+                                advisorName = advisorName.trim(),
+                                technicianName = technicianName.trim(),
                                 vehicleMake = vehicleMake.trim(),
                                 vehicleModel = vehicleModel.trim(),
                                 vehicleYear = vehicleYear.trim(),
@@ -128,6 +133,37 @@ fun NewOrderScreen(
                     .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
+            FormSection(title = "Visit") {
+                Field(
+                    label = "RO number",
+                    value = repairOrderNumber,
+                    onChange = { repairOrderNumber = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Field(
+                        label = "Mileage",
+                        value = mileage,
+                        onChange = { mileage = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Field(
+                        label = "Advisor",
+                        value = advisorName,
+                        onChange = { advisorName = it },
+                        modifier = Modifier.weight(1.2f),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Field(
+                    label = "Technician",
+                    value = technicianName,
+                    onChange = { technicianName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             FormSection(title = "Vehicle") {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Field(
@@ -182,11 +218,10 @@ fun NewOrderScreen(
                 )
             }
 
-            FormSection(title = "Presenting issue") {
+            FormSection(title = "Customer concern") {
                 Field(
                     label =
-                        "Describe what the customer is reporting — " +
-                            "noises, warning lights, driveability, etc.",
+                        "Describe the customer concern or requested inspection scope.",
                     value = presentingIssue,
                     onChange = { presentingIssue = it },
                     modifier = Modifier.fillMaxWidth().height(140.dp),

@@ -42,11 +42,10 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Orders tab — list of repair orders the shop is working on, with a FAB to
- * create a new one. Mirrors [SessionsHomeScreen]'s layout so the two
- * "library" tabs feel consistent; the subtitle differs ("your work") and
- * each card shows vehicle + customer + status chip instead of a
- * conversation preview.
+ * Inspection records tab.
+ *
+ * This is the first dedicated MPI home for service-visit records tied to a
+ * repair order, vehicle, customer, and structured inspection findings.
  */
 @Composable
 fun OrdersScreen(
@@ -67,7 +66,7 @@ fun OrdersScreen(
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(20.dp))
             Text(
-                text = "Orders",
+                text = "Inspections",
                 color = AppColors.Accent,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
@@ -75,8 +74,8 @@ fun OrdersScreen(
             Spacer(Modifier.height(2.dp))
             Text(
                 text =
-                    if (orders.isEmpty()) "Your shop's work lands here."
-                    else "${orders.size} ${if (orders.size == 1) "order" else "orders"}",
+                    if (orders.isEmpty()) "Every service visit inspection lands here."
+                    else "${orders.size} ${if (orders.size == 1) "inspection" else "inspections"}",
                 color = AppColors.TextSecondary,
                 fontSize = 13.sp,
             )
@@ -89,14 +88,14 @@ fun OrdersScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "No orders yet",
+                            text = "No inspections yet",
                             color = AppColors.TextPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Tap + to create a new repair order.",
+                            text = "Tap + to create an inspection record.",
                             color = AppColors.TextSecondary,
                             fontSize = 13.sp,
                         )
@@ -118,7 +117,7 @@ fun OrdersScreen(
             }
         }
 
-        // + FAB (same language as Chats / Convos) — creates a new order.
+        // + FAB creates a new inspection record.
         Box(
             modifier =
                 Modifier
@@ -171,7 +170,12 @@ private fun OrderCard(
             StatusChip(status = order.status)
         }
         Text(
-            text = order.subtitleDisplay,
+            text =
+                listOfNotNull(
+                        order.subtitleDisplay.takeIf { it != "No details yet" },
+                        order.identityLine.ifBlank { null },
+                    )
+                    .joinToString(" · "),
             color = AppColors.TextSecondary,
             fontSize = 13.sp,
             lineHeight = 18.sp,
@@ -182,8 +186,8 @@ private fun OrderCard(
         ) {
             Text(
                 text =
-                    if (sessionCount == 0) "No diagnostic sessions yet"
-                    else "$sessionCount diagnostic ${if (sessionCount == 1) "session" else "sessions"}",
+                    if (sessionCount == 0) order.findingSummary
+                    else "${order.findingSummary} · $sessionCount evidence ${if (sessionCount == 1) "session" else "sessions"}",
                 color = AppColors.TextMuted,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,

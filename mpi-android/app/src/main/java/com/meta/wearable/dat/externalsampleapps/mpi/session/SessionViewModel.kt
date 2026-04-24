@@ -137,7 +137,11 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     fun setActiveOrder(id: String?) = _uiState.update { it.copy(activeOrderId = id) }
 
     fun createOrder(order: RepairOrder) {
-        val stamped = order.copy(updatedAt = System.currentTimeMillis())
+        val stamped =
+            order.copy(
+                updatedAt = System.currentTimeMillis(),
+                findings = if (order.findings.isEmpty()) defaultInspectionFindings() else order.findings,
+            )
         _uiState.update { state -> state.copy(orders = listOf(stamped) + state.orders) }
         persistOrders(_uiState.value.orders)
     }
@@ -477,6 +481,20 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun orderToJson(o: RepairOrder): JSONObject {
+        val findingsArr = JSONArray()
+        for (f in o.findings) {
+            findingsArr.put(
+                JSONObject()
+                    .put("id", f.id)
+                    .put("system", f.system)
+                    .put("component", f.component)
+                    .put("location", f.location)
+                    .put("measurement", f.measurement)
+                    .put("recommendation", f.recommendation)
+                    .put("severity", f.severity.name)
+                    .put("note", f.note),
+            )
+        }
         val diagnosesArr = JSONArray()
         for (d in o.diagnoses) {
             diagnosesArr.put(
@@ -493,6 +511,10 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             .put("id", o.id)
             .put("createdAt", o.createdAt)
             .put("updatedAt", o.updatedAt)
+            .put("repairOrderNumber", o.repairOrderNumber)
+            .put("mileage", o.mileage)
+            .put("advisorName", o.advisorName)
+            .put("technicianName", o.technicianName)
             .put("vehicleMake", o.vehicleMake)
             .put("vehicleModel", o.vehicleModel)
             .put("vehicleYear", o.vehicleYear)
@@ -503,6 +525,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             .put("presentingIssue", o.presentingIssue)
             .put("notes", o.notes)
             .put("status", o.status.name)
+            .put("findings", findingsArr)
             .put("diagnoses", diagnosesArr)
             .apply {
                 if (o.closedAt != null) put("closedAt", o.closedAt)
@@ -511,6 +534,25 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun orderFromJson(o: JSONObject): RepairOrder {
+        val findingsArr = o.optJSONArray("findings") ?: JSONArray()
+        val findings =
+            (0 until findingsArr.length()).map {
+                val f = findingsArr.getJSONObject(it)
+                InspectionFinding(
+                    id = f.optString("id"),
+                    system = f.optString("system"),
+                    component = f.optString("component"),
+                    location = f.optString("location"),
+                    measurement = f.optString("measurement"),
+                    recommendation = f.optString("recommendation"),
+                    severity =
+                        runCatching {
+                                FindingSeverity.valueOf(f.optString("severity", "YELLOW"))
+                            }
+                            .getOrDefault(FindingSeverity.YELLOW),
+                    note = f.optString("note"),
+                )
+            }
         val arr = o.optJSONArray("diagnoses") ?: JSONArray()
         val diagnoses =
             (0 until arr.length()).map {
@@ -530,6 +572,10 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             id = o.optString("id"),
             createdAt = o.optLong("createdAt", System.currentTimeMillis()),
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
+            repairOrderNumber = o.optString("repairOrderNumber"),
+            mileage = o.optString("mileage"),
+            advisorName = o.optString("advisorName"),
+            technicianName = o.optString("technicianName"),
             vehicleMake = o.optString("vehicleMake"),
             vehicleModel = o.optString("vehicleModel"),
             vehicleYear = o.optString("vehicleYear"),
@@ -542,9 +588,40 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
             status =
                 runCatching { OrderStatus.valueOf(o.optString("status", "OPEN")) }
                     .getOrDefault(OrderStatus.OPEN),
+            findings = findings,
             diagnoses = diagnoses,
             closedAt = if (o.has("closedAt")) o.optLong("closedAt") else null,
             closeSummary = o.optString("closeSummary"),
         )
     }
+
+    private fun defaultInspectionFindings(): List<InspectionFinding> =
+        listOf(
+            InspectionFinding(
+                id = "finding-tires",
+                system = "Tires",
+                component = "Rear tires",
+                location = "Rear left / rear right",
+                measurement = "Pending tread depth",
+                recommendation = "Measure tread and document wear pattern",
+                severity = FindingSeverity.YELLOW,
+                note = "Capture evidence clip once measurement is visible.",
+            ),
+            InspectionFinding(
+                id = "finding-brakes",
+                system = "Brakes",
+                component = "Front pads",
+                measurement = "Pending pad thickness",
+                recommendation = "Inspect pad life and rotor condition",
+                severity = FindingSeverity.YELLOW,
+            ),
+            InspectionFinding(
+                id = "finding-battery",
+                system = "Battery",
+                component = "12V battery",
+                measurement = "Pending tester result",
+                recommendation = "Record health / voltage result",
+                severity = FindingSeverity.GREEN,
+            ),
+        )
 }

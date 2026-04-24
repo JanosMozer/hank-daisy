@@ -43,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.meta.wearable.dat.externalsampleapps.mpi.session.FindingSeverity
+import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionFinding
 import com.meta.wearable.dat.externalsampleapps.mpi.session.OrderStatus
 import com.meta.wearable.dat.externalsampleapps.mpi.session.RepairOrder
 import com.meta.wearable.dat.externalsampleapps.mpi.session.Session
@@ -52,17 +54,12 @@ import java.util.Locale
 
 private enum class DetailTab(val label: String) {
     OVERVIEW("Overview"),
-    DIAGNOSIS("Diagnosis"),
+    DIAGNOSIS("Findings"),
     NOTES("Notes"),
 }
 
 /**
- * Full-screen detail view for a single [RepairOrder].
- *
- * Three tabs — Overview (vehicle + customer + primary action), Diagnosis
- * (linked sessions + structured diagnosis entries once Phase 3 lands),
- * Notes (free-form notepad). "Start diagnosis" on Overview is the primary
- * CTA: it tags the next saved session to this order via [onStartDiagnosis].
+ * Full-screen detail view for a single MPI inspection record.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -215,9 +212,6 @@ private fun OverviewTab(
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // Primary CTA — biggest button on the screen, matches the FAB
-        // language from the other tabs. Closed orders grey out and swap
-        // to a "reopen" affordance.
         if (order.status != OrderStatus.CLOSED) {
             Box(
                 modifier =
@@ -229,7 +223,7 @@ private fun OverviewTab(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Start diagnosis",
+                    text = "Start evidence capture",
                     color = AppColors.AccentOn,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -246,7 +240,7 @@ private fun OverviewTab(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Reopen order",
+                    text = "Reopen inspection",
                     color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -256,19 +250,28 @@ private fun OverviewTab(
 
         InfoCard(title = "Vehicle") {
             KeyValue("Year / make / model", order.vehicleDisplay)
+            if (order.repairOrderNumber.isNotBlank()) KeyValue("RO number", order.repairOrderNumber)
+            if (order.mileage.isNotBlank()) KeyValue("Mileage", order.mileage)
             if (order.vehicleVin.isNotBlank()) KeyValue("VIN", order.vehicleVin)
             if (order.licensePlate.isNotBlank()) KeyValue("Plate", order.licensePlate)
         }
 
-        if (order.customerName.isNotBlank() || order.customerPhone.isNotBlank()) {
-            InfoCard(title = "Customer") {
+        if (
+            order.customerName.isNotBlank() ||
+                order.customerPhone.isNotBlank() ||
+                order.advisorName.isNotBlank() ||
+                order.technicianName.isNotBlank()
+        ) {
+            InfoCard(title = "People") {
                 if (order.customerName.isNotBlank()) KeyValue("Name", order.customerName)
                 if (order.customerPhone.isNotBlank()) KeyValue("Phone", order.customerPhone)
+                if (order.advisorName.isNotBlank()) KeyValue("Advisor", order.advisorName)
+                if (order.technicianName.isNotBlank()) KeyValue("Technician", order.technicianName)
             }
         }
 
         if (order.presentingIssue.isNotBlank()) {
-            InfoCard(title = "Presenting issue") {
+            InfoCard(title = "Inspection scope") {
                 Text(
                     text = order.presentingIssue,
                     color = AppColors.TextPrimary,
@@ -280,10 +283,8 @@ private fun OverviewTab(
 
         InfoCard(title = "Stats") {
             KeyValue("Status", order.status.label)
-            KeyValue(
-                "Diagnostic sessions",
-                "$sessionCount ${if (sessionCount == 1) "session" else "sessions"}",
-            )
+            KeyValue("Finding summary", order.findingSummary)
+            KeyValue("Evidence sessions", "$sessionCount ${if (sessionCount == 1) "session" else "sessions"}")
             KeyValue(
                 "Created",
                 SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.US).format(Date(order.createdAt)),
@@ -296,27 +297,21 @@ private fun OverviewTab(
             }
         }
 
-        // Export: generate a PDF order report from Hank's Gemini-synthesised
-        // notes + any structured diagnoses + the session trail. Sits between
-        // the primary CTA and the destructive actions so the eye lands here
-        // naturally when the job is winding down.
         if (onGenerateReport != null) {
             SecondaryButton(
-                label = "Generate report PDF",
+                label = "Generate inspection PDF",
                 onClick = onGenerateReport,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
-        // Secondary actions footer. Close/delete are destructive enough
-        // that they live apart from the primary CTA.
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (order.status != OrderStatus.CLOSED) {
                 SecondaryButton(
-                    label = "Mark closed",
+                    label = "Mark inspection closed",
                     onClick = onCloseOrder,
                     modifier = Modifier.weight(1f),
                 )
@@ -339,18 +334,18 @@ private fun DiagnosisTab(
     sessions: List<Session>,
     onOpenSession: (String) -> Unit,
 ) {
-    if (order.diagnoses.isEmpty() && sessions.isEmpty()) {
+    if (order.findings.isEmpty() && order.diagnoses.isEmpty() && sessions.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "No diagnosis yet",
+                    text = "No findings yet",
                     color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Start a diagnosis from Overview — steps land here.",
+                    text = "Start evidence capture from Overview and document findings here.",
                     color = AppColors.TextSecondary,
                     fontSize = 13.sp,
                 )
@@ -363,6 +358,15 @@ private fun DiagnosisTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (order.findings.isNotEmpty()) {
+            item {
+                SectionHeader("Inspection findings")
+            }
+            items(order.findings, key = { it.id }) { finding ->
+                FindingCard(finding = finding)
+            }
+            item { Spacer(Modifier.height(8.dp)) }
+        }
         if (order.diagnoses.isNotEmpty()) {
             item {
                 SectionHeader("Diagnostic steps")
@@ -408,7 +412,7 @@ private fun DiagnosisTab(
         }
         if (sessions.isNotEmpty()) {
             item {
-                SectionHeader("Diagnostic sessions")
+                SectionHeader("Evidence sessions")
             }
             items(sessions, key = { it.id }) { s ->
                 Column(
@@ -452,9 +456,6 @@ private fun DiagnosisTab(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotesTab(order: RepairOrder, onUpdateOrder: (RepairOrder) -> Unit) {
-    // Local state so typing is snappy; we persist through the parent
-    // on every change. Debouncing could come later if write pressure
-    // becomes noticeable, but SharedPreferences handles this fine.
     var notes by remember(order.id) { mutableStateOf(order.notes) }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -465,7 +466,7 @@ private fun NotesTab(order: RepairOrder, onUpdateOrder: (RepairOrder) -> Unit) {
                 notes = it
                 onUpdateOrder(order.copy(notes = it))
             },
-            label = { Text("Notes about this order", fontSize = 12.sp) },
+            label = { Text("Inspection notes", fontSize = 12.sp) },
             singleLine = false,
             modifier = Modifier.fillMaxSize().padding(bottom = 60.dp),
             colors =
@@ -479,6 +480,63 @@ private fun NotesTab(order: RepairOrder, onUpdateOrder: (RepairOrder) -> Unit) {
                     cursorColor = AppColors.Accent,
                 ),
         )
+    }
+}
+
+@Composable
+private fun FindingCard(finding: InspectionFinding) {
+    val (bg, fg) =
+        when (finding.severity) {
+            FindingSeverity.GREEN ->
+                androidx.compose.ui.graphics.Color(0xFFE8F5E9) to androidx.compose.ui.graphics.Color(0xFF1B5E20)
+            FindingSeverity.YELLOW ->
+                androidx.compose.ui.graphics.Color(0xFFFFF8E1) to androidx.compose.ui.graphics.Color(0xFF8D6E00)
+            FindingSeverity.RED ->
+                androidx.compose.ui.graphics.Color(0xFFFFEBEE) to androidx.compose.ui.graphics.Color(0xFFB71C1C)
+        }
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(AppColors.Surface, shape = RoundedCornerShape(12.dp))
+                .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "${finding.system} · ${finding.component}",
+                color = AppColors.TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Box(
+                modifier = Modifier.background(bg, shape = RoundedCornerShape(999.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = finding.severity.label,
+                    color = fg,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        if (finding.location.isNotBlank()) KeyValue("Location", finding.location)
+        if (finding.measurement.isNotBlank()) KeyValue("Measurement", finding.measurement)
+        if (finding.recommendation.isNotBlank()) KeyValue("Recommendation", finding.recommendation)
+        if (finding.note.isNotBlank()) {
+            Text(
+                text = finding.note,
+                color = AppColors.TextMuted,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+            )
+        }
     }
 }
 

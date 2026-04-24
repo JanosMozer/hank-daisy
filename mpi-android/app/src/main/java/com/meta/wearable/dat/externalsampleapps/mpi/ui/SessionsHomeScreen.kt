@@ -42,14 +42,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Home screen after splash. A list of past Hank sessions — each with an
- * auto-derived title (first user turn) and description (first Hank reply).
- * A big "+" FAB in the bottom-right starts a new session.
- */
-/**
- * Chats tab — past sessions + a purple "+" FAB to start a new
- * text/voice chat (no glasses). The glasses-stream entry point
- * lives in ConvosScreen.
+ * Sessions tab — saved evidence capture sessions plus ad-hoc follow-up chats.
  */
 @Composable
 fun SessionsHomeScreen(
@@ -85,7 +78,7 @@ fun SessionsHomeScreen(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "Your conversations",
+                        text = "Saved evidence sessions",
                         color = AppColors.TextSecondary,
                         fontSize = 13.sp,
                     )
@@ -122,7 +115,7 @@ fun SessionsHomeScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Tap + to start talking to Hank.",
+                            text = "Start capture from the Capture tab or use + for a follow-up chat.",
                             color = AppColors.TextSecondary,
                             fontSize = 13.sp,
                         )
@@ -140,8 +133,7 @@ fun SessionsHomeScreen(
             }
         }
 
-        // Single purple FAB: start a new text/voice chat (no glasses).
-        // The glasses stream entry point lives in the Convos tab.
+        // Purple FAB starts a follow-up chat without opening the glasses stream.
         Box(
             modifier =
                 Modifier

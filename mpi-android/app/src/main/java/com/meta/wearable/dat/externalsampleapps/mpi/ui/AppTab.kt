@@ -16,21 +16,18 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
- * Bottom-nav destinations.
- *  - CONVOS  : entry point for a fresh live, glasses-mediated call.
- *  - CHATS   : library of past free-form sessions + "+" for a text/voice
- *              chat (no glasses). Order-linked sessions live inside each
- *              order rather than here.
- *  - ORDERS  : repair orders — the primary workspace for the shop pivot.
- *              Replaces the former TIPS tab; tip content moves to Settings.
- *  - SETTINGS: theme / accessibility / help / about.
+ * Bottom-nav destinations for the MPI app scaffold.
+ *  - CONVOS  : live glasses capture for technician-guided inspection work
+ *  - CHATS   : evidence sessions and ad-hoc follow-up conversations
+ *  - ORDERS  : inspection records tied to a repair order / service visit
+ *  - SETTINGS: theme / accessibility / help / about
  *
  * Profile is intentionally NOT a tab — it's a modal opened from the
  * avatar on the Chats home (a tab loop bug previously kept reopening it).
  */
 enum class AppTab(val label: String, val icon: ImageVector) {
-    CONVOS("Convos", Icons.Outlined.RecordVoiceOver),
-    CHATS("Chats", Icons.Outlined.Forum),
-    ORDERS("Orders", Icons.Outlined.Build),
+    CONVOS("Capture", Icons.Outlined.RecordVoiceOver),
+    CHATS("Sessions", Icons.Outlined.Forum),
+    ORDERS("Inspections", Icons.Outlined.Build),
     SETTINGS("Settings", Icons.Outlined.Settings),
 }

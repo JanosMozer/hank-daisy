@@ -6,9 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// HomeScreen - DAT Registration Entry Point
-//
-// This screen handles DAT device registration.
+// HomeScreen - DAT registration entry point for the MPI app.
 
 package com.meta.wearable.dat.externalsampleapps.mpi.ui
 

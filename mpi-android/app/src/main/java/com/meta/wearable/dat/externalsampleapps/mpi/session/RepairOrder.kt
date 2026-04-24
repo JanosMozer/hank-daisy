@@ -9,19 +9,21 @@
 package com.meta.wearable.dat.externalsampleapps.mpi.session
 
 /**
- * A repair order — the primary unit of work for the shop pivot.
+ * The primary MPI work unit.
  *
- * Owns vehicle + customer info, the presenting issue, the diagnostic
- * timeline (filled in as Hank runs sessions), and the final close-out
- * notes. Sessions point BACK to an order via [Session.orderId]; that
- * one-way link keeps persistence simple (session writes don't need to
- * amend the order doc) and lets us derive "sessions on this order" with
- * a single filter pass.
+ * The name stays `RepairOrder` for now to avoid a wide rename through the
+ * copied scaffold, but the user-facing meaning in `mpi-android` is an
+ * inspection record tied to a repair order / service visit.
  */
 data class RepairOrder(
     val id: String,
     val createdAt: Long,
     val updatedAt: Long,
+    // MPI identity
+    val repairOrderNumber: String = "",
+    val mileage: String = "",
+    val advisorName: String = "",
+    val technicianName: String = "",
     // Vehicle
     val vehicleMake: String = "",
     val vehicleModel: String = "",
@@ -35,9 +37,10 @@ data class RepairOrder(
     val presentingIssue: String = "",
     val notes: String = "",
     val status: OrderStatus = OrderStatus.OPEN,
-    // Structured diagnostic timeline — populated in Phase 3 when Hank
-    // starts emitting structured output. Defined now so the schema is
-    // stable in persistence.
+    // Structured inspection findings. This is the first MPI-specific shape
+    // added on top of the copied app scaffold.
+    val findings: List<InspectionFinding> = emptyList(),
+    // Structured diagnostic timeline tied to evidence-capture sessions.
     val diagnoses: List<DiagnosisEntry> = emptyList(),
     // Close-out
     val closedAt: Long? = null,
@@ -67,6 +70,28 @@ data class RepairOrder(
                 else -> "No details yet"
             }
 
+    val identityLine: String
+        get() =
+            listOfNotNull(
+                    repairOrderNumber.ifBlank { null }?.let { "RO $it" },
+                    mileage.ifBlank { null }?.let { "$it mi" },
+                )
+                .joinToString(" · ")
+
+    val findingSummary: String
+        get() {
+            if (findings.isEmpty()) return "No findings yet"
+            val red = findings.count { it.severity == FindingSeverity.RED }
+            val yellow = findings.count { it.severity == FindingSeverity.YELLOW }
+            val green = findings.count { it.severity == FindingSeverity.GREEN }
+            return buildList {
+                    if (red > 0) add("$red red")
+                    if (yellow > 0) add("$yellow yellow")
+                    if (green > 0) add("$green green")
+                }
+                .joinToString(" · ")
+        }
+
     companion object {
         /** Create a blank draft with a stable id + timestamps. */
         fun blank(): RepairOrder {
@@ -80,6 +105,23 @@ enum class OrderStatus(val label: String) {
     OPEN("Open"),
     IN_PROGRESS("In progress"),
     CLOSED("Closed"),
+}
+
+data class InspectionFinding(
+    val id: String,
+    val system: String,
+    val component: String,
+    val location: String = "",
+    val measurement: String = "",
+    val recommendation: String = "",
+    val severity: FindingSeverity = FindingSeverity.YELLOW,
+    val note: String = "",
+)
+
+enum class FindingSeverity(val label: String) {
+    GREEN("Green"),
+    YELLOW("Yellow"),
+    RED("Red"),
 }
 
 /**

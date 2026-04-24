@@ -39,9 +39,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 /**
- * Landing tab for starting a live, glasses-mediated conversation.
- * Minimal UI: a hero block explaining what this is, then a prominent
- * purple "+" FAB anchored at the bottom-center to start the call.
+ * Landing tab for starting a live glasses-based evidence capture session.
  */
 @Composable
 fun ConvosScreen(
@@ -84,14 +82,14 @@ fun ConvosScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 32.dp),
         ) {
             Text(
-                text = "Convos",
+                text = "Capture",
                 color = AppColors.Accent,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Live calls with Hank, through your glasses.",
+                text = "Hands-free inspection capture through your glasses.",
                 color = AppColors.TextSecondary,
                 fontSize = 13.sp,
             )
@@ -115,17 +113,17 @@ fun ConvosScreen(
                 )
                 Text(
                     text =
-                        "Starts the live stream from your Ray-Ban Meta glasses and " +
-                            "opens the voice loop with Hank. He sees what you see " +
-                            "and listens the whole time — just start talking.",
+                        "Starts the live stream from your Meta glasses so you can " +
+                            "record findings, show measurements, and narrate the inspection " +
+                            "without putting tools down.",
                     color = AppColors.TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                 )
                 Text(
                     text =
-                        "Past conversations show up under the Chats tab. To talk to " +
-                            "Hank without the glasses, use the Chats tab's + button.",
+                        "Saved evidence sessions land under Sessions. Use Inspections to tie " +
+                            "capture back to a specific RO and finding set.",
                     color = AppColors.TextMuted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
@@ -202,7 +200,7 @@ fun ConvosScreen(
             ) {
                 Text(
                     text =
-                        "Couldn't start the glasses stream. Check that your Ray-Ban Meta is " +
+                        "Couldn't start the glasses stream. Check that your Meta glasses are " +
                             "paired in the Meta AI app and Camera permission is granted, then " +
                             "tap + again.",
                     color = androidx.compose.ui.graphics.Color.White,
