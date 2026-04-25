@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppSettings
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.SpeechRecognitionRoute
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.TextScale
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.ThemeMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
@@ -42,6 +43,7 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 fun SettingsScreen(
     settings: AppSettings,
     onCaptureModeChange: (CaptureMode) -> Unit,
+    onSpeechRecognitionRouteChange: (SpeechRecognitionRoute) -> Unit,
     onWorkDomainChange: (WorkDomain) -> Unit,
     onDemoCommentaryModeChange: (Boolean) -> Unit,
     onThemeChange: (ThemeMode) -> Unit,
@@ -79,6 +81,20 @@ fun SettingsScreen(
                         if (it) CaptureMode.PHONE_CAMERA else CaptureMode.GLASSES,
                     )
                 },
+            )
+            Spacer(Modifier.height(14.dp))
+            SegmentedRow(
+                label = "Speech recognition",
+                options = SpeechRecognitionRoute.values().map { it.segmentLabel },
+                selectedIndex = settings.speechRecognitionRoute.ordinal,
+                onSelect = { onSpeechRecognitionRouteChange(SpeechRecognitionRoute.values()[it]) },
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = settings.speechRecognitionRoute.settingsDescription,
+                color = AppColors.TextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
             )
             Spacer(Modifier.height(14.dp))
             SegmentedRow(
@@ -146,6 +162,16 @@ fun SettingsScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Version", color = AppColors.TextSecondary, fontSize = 13.sp)
                 Text("0.1 · beta", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Speech", color = AppColors.TextSecondary, fontSize = 13.sp)
+                Text(
+                    settings.speechRecognitionRoute.settingsLabel,
+                    color = AppColors.TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

@@ -19,6 +19,7 @@ enum class TextScale(val factor: Float, val label: String) {
 
 data class AppSettings(
     val captureMode: CaptureMode = CaptureMode.GLASSES,
+    val speechRecognitionRoute: SpeechRecognitionRoute = SpeechRecognitionRoute.ANDROID,
     val workDomain: WorkDomain = WorkDomain.CAR,
     val themeMode: ThemeMode = ThemeMode.LIGHT,
     val textScale: TextScale = TextScale.NORMAL,

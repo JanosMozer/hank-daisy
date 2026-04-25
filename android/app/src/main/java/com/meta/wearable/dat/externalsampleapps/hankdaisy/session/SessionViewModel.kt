@@ -225,6 +225,13 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
                     CaptureMode.fromStored(
                         o.optString(CaptureMode.KEY_CAPTURE_MODE, CaptureMode.GLASSES.name),
                     ),
+                speechRecognitionRoute =
+                    SpeechRecognitionRoute.fromStored(
+                        o.optString(
+                            SpeechRecognitionRoute.KEY_SPEECH_RECOGNITION_ROUTE,
+                            SpeechRecognitionRoute.ANDROID.name,
+                        ),
+                    ),
                 workDomain =
                     WorkDomain.fromStored(
                         o.optString(WorkDomain.KEY_WORK_DOMAIN, WorkDomain.CAR.name),
@@ -244,6 +251,10 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         val o =
             JSONObject()
                 .put(CaptureMode.KEY_CAPTURE_MODE, s.captureMode.name)
+                .put(
+                    SpeechRecognitionRoute.KEY_SPEECH_RECOGNITION_ROUTE,
+                    s.speechRecognitionRoute.name,
+                )
                 .put(WorkDomain.KEY_WORK_DOMAIN, s.workDomain.name)
                 .put("theme", s.themeMode.name)
                 .put("textScale", s.textScale.name)

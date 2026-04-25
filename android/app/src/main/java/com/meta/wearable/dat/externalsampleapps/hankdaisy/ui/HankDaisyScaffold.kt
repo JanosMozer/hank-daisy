@@ -367,6 +367,9 @@ private fun MainTabs(
                 onCaptureModeChange = {
                   sessionVm.updateSettings(state.settings.copy(captureMode = it))
                 },
+                onSpeechRecognitionRouteChange = {
+                  sessionVm.updateSettings(state.settings.copy(speechRecognitionRoute = it))
+                },
                 onWorkDomainChange = {
                   sessionVm.updateSettings(state.settings.copy(workDomain = it))
                 },
