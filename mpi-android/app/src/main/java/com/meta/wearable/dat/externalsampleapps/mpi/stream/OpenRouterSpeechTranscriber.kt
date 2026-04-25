@@ -6,11 +6,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
+package com.meta.wearable.dat.externalsampleapps.mpi.stream
 
 import android.util.Base64
 import android.util.Log
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.mpi.BuildConfig
 import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient

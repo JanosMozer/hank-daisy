@@ -230,6 +230,13 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         return try {
             val o = JSONObject(raw)
             AppSettings(
+                speechRecognitionRoute =
+                    SpeechRecognitionRoute.fromStored(
+                        o.optString(
+                            SpeechRecognitionRoute.KEY_SPEECH_RECOGNITION_ROUTE,
+                            SpeechRecognitionRoute.ANDROID.name,
+                        ),
+                    ),
                 themeMode = ThemeMode.valueOf(o.optString("theme", "LIGHT")),
                 textScale = TextScale.valueOf(o.optString("textScale", "NORMAL")),
                 highContrast = o.optBoolean("highContrast", false),
@@ -243,6 +250,10 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     private fun persistSettings(s: AppSettings) {
         val o =
             JSONObject()
+                .put(
+                    SpeechRecognitionRoute.KEY_SPEECH_RECOGNITION_ROUTE,
+                    s.speechRecognitionRoute.name,
+                )
                 .put("theme", s.themeMode.name)
                 .put("textScale", s.textScale.name)
                 .put("highContrast", s.highContrast)

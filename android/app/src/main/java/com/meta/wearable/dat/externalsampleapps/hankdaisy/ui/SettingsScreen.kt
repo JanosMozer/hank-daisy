@@ -27,17 +27,25 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppSettings
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.SpeechRecognitionRoute
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.TextScale
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.ThemeMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.SpeechRecognitionDebugStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
@@ -52,6 +60,9 @@ fun SettingsScreen(
     onHapticChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current.applicationContext
+    val speechDebug by remember(context) { SpeechRecognitionDebugStore.observe(context) }.collectAsState()
+
     Column(
         modifier =
             modifier
@@ -183,6 +194,53 @@ fun SettingsScreen(
                 Text("Voice", color = AppColors.TextSecondary, fontSize = 13.sp)
                 Text("ElevenLabs flash v2.5", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Speech debug",
+                color = AppColors.TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text =
+                    buildString {
+                        append("Active route: ")
+                        append(settings.speechRecognitionRoute.settingsLabel)
+                        append('\n')
+                        append("Last backend: ")
+                        append(speechDebug.backendLabel)
+                        if (speechDebug.modelId.isNotBlank()) {
+                            append(" · ")
+                            append(speechDebug.modelId)
+                        }
+                        append('\n')
+                        append("Last status: ")
+                        append(speechDebug.status)
+                        speechDebug.latencyMs?.let {
+                            append(" · ")
+                            append(it)
+                            append(" ms")
+                        }
+                        if (speechDebug.updatedAt > 0L) {
+                            append('\n')
+                            append("Updated: ")
+                            append(
+                                SimpleDateFormat("MMM d, HH:mm:ss", Locale.US)
+                                    .format(Date(speechDebug.updatedAt)),
+                            )
+                        }
+                        if (speechDebug.transcript.isNotBlank()) {
+                            append('\n')
+                            append("Last text: ")
+                            append(speechDebug.transcript.take(120))
+                            if (speechDebug.transcript.length > 120) append("...")
+                        }
+                    },
+                color = AppColors.TextSecondary,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
         }
 
         Spacer(Modifier.height(80.dp))

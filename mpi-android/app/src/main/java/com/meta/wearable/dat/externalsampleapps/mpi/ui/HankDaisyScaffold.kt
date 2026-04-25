@@ -341,6 +341,9 @@ private fun MainTabs(
         AppTab.SETTINGS ->
             SettingsScreen(
                 settings = state.settings,
+                onSpeechRecognitionRouteChange = {
+                  sessionVm.updateSettings(state.settings.copy(speechRecognitionRoute = it))
+                },
                 onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
                 onTextScaleChange = {
                   sessionVm.updateSettings(state.settings.copy(textScale = it))

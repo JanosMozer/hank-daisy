@@ -104,6 +104,7 @@ class VoiceCommandManager(private val context: Context) {
     private var isRunning = false
     private var isFollowUp = false  // true when we detected wake word, now waiting for question
     private var isMuted = false     // pause listening while Hank himself is talking
+    private var recognitionCycleStartedAt: Long = 0L
     @Volatile private var audioCaptureActive = false
     @Volatile private var lastCallbackAt: Long = 0L
 
@@ -245,6 +246,7 @@ class VoiceCommandManager(private val context: Context) {
             if (!isFollowUp) {
                 _state.value = VoiceState.Passive
             }
+            recognitionCycleStartedAt = System.currentTimeMillis()
 
             recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(createListener())
@@ -284,7 +286,8 @@ class VoiceCommandManager(private val context: Context) {
             }
 
             audioCaptureActive = true
-            lastCallbackAt = System.currentTimeMillis()
+            recognitionCycleStartedAt = System.currentTimeMillis()
+            lastCallbackAt = recognitionCycleStartedAt
             captureThread =
                 thread(name = "hank-openrouter-stt") {
                     val wavBytes = captureUtteranceWav()
@@ -293,6 +296,16 @@ class VoiceCommandManager(private val context: Context) {
                     if (wavBytes == null) {
                         handler.post {
                             lastCallbackAt = System.currentTimeMillis()
+                            if (isFollowUp) {
+                                SpeechRecognitionDebugStore.record(
+                                    context = context,
+                                    backendLabel = "OpenRouter OpenAI",
+                                    modelId = "capture",
+                                    status = "No speech detected",
+                                    transcript = "",
+                                    latencyMs = currentLatencyMs(),
+                                )
+                            }
                             if (isFollowUp) {
                                 Log.d(TAG, "OpenRouter follow-up timed out, returning to passive")
                                 isFollowUp = false
@@ -307,13 +320,50 @@ class VoiceCommandManager(private val context: Context) {
 
                     handler.post {
                         lastCallbackAt = System.currentTimeMillis()
-                        if (text.isNullOrBlank()) {
-                            if (isFollowUp) {
-                                isFollowUp = false
+                        when (text.status) {
+                            OpenRouterSpeechTranscriber.TranscriptionResult.Status.OK -> {
+                                SpeechRecognitionDebugStore.record(
+                                    context = context,
+                                    backendLabel = "OpenRouter OpenAI",
+                                    modelId = text.modelId,
+                                    status = "OK",
+                                    transcript = text.text.orEmpty(),
+                                    latencyMs = text.latencyMs,
+                                )
+                                handleSpeechResults(listOf(text.text.orEmpty()))
                             }
-                            scheduleRestart()
-                        } else {
-                            handleSpeechResults(listOf(text))
+                            OpenRouterSpeechTranscriber.TranscriptionResult.Status.IGNORED -> {
+                                if (isFollowUp) {
+                                    SpeechRecognitionDebugStore.record(
+                                        context = context,
+                                        backendLabel = "OpenRouter OpenAI",
+                                        modelId = text.modelId,
+                                        status = text.message ?: "No clear foreground speech",
+                                        transcript = "",
+                                        latencyMs = text.latencyMs,
+                                    )
+                                }
+                                if (isFollowUp) {
+                                    isFollowUp = false
+                                }
+                                scheduleRestart()
+                            }
+                            OpenRouterSpeechTranscriber.TranscriptionResult.Status.ERROR -> {
+                                if (isFollowUp) {
+                                    SpeechRecognitionDebugStore.record(
+                                        context = context,
+                                        backendLabel = "OpenRouter OpenAI",
+                                        modelId = text.modelId,
+                                        status = text.message ?: "Remote transcription failed",
+                                        transcript = "",
+                                        latencyMs = text.latencyMs,
+                                    )
+                                }
+                                if (isFollowUp) {
+                                    isFollowUp = false
+                                }
+                                scheduleRestart()
+                            }
                         }
                     }
                 }
@@ -336,6 +386,16 @@ class VoiceCommandManager(private val context: Context) {
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                    if (isFollowUp) {
+                        SpeechRecognitionDebugStore.record(
+                            context = context,
+                            backendLabel = "Android local",
+                            modelId = "android.speech.SpeechRecognizer",
+                            status = "No speech detected",
+                            transcript = "",
+                            latencyMs = currentLatencyMs(),
+                        )
+                    }
                     // Normal timeout — just restart
                     if (isFollowUp) {
                         Log.d(TAG, "Follow-up timed out, returning to passive")
@@ -357,6 +417,17 @@ class VoiceCommandManager(private val context: Context) {
         override fun onResults(results: Bundle?) {
             lastCallbackAt = System.currentTimeMillis()
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            val transcript = matches?.firstOrNull()?.trim().orEmpty()
+            if (transcript.isNotBlank() || isFollowUp) {
+                SpeechRecognitionDebugStore.record(
+                    context = context,
+                    backendLabel = "Android local",
+                    modelId = "android.speech.SpeechRecognizer",
+                    status = if (transcript.isBlank()) "Empty recognition result" else "OK",
+                    transcript = transcript,
+                    latencyMs = currentLatencyMs(),
+                )
+            }
             handleSpeechResults(matches)
         }
 
@@ -626,4 +697,7 @@ class VoiceCommandManager(private val context: Context) {
         }
         return sqrt(sum / count)
     }
+
+    private fun currentLatencyMs(): Long? =
+        recognitionCycleStartedAt.takeIf { it > 0L }?.let { System.currentTimeMillis() - it }
 }
