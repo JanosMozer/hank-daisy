@@ -41,6 +41,7 @@ class AudioRouteManager(private val context: Context) {
 
     companion object {
         private const val TAG = "HankDaisy:AudioRoute"
+        private const val VOICE_SPEED_MULTIPLIER = 1.2f
         private const val USE_ELEVENLABS = true
     }
 
@@ -90,6 +91,7 @@ class AudioRouteManager(private val context: Context) {
             TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     tts?.language = Locale.US
+                    tts?.setSpeechRate(VOICE_SPEED_MULTIPLIER)
                     tts?.setAudioAttributes(
                         AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_MEDIA)

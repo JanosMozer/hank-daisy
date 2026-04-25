@@ -91,9 +91,12 @@ fun PhoneCameraStreamScreen(
         )
 
         StatusPill(
-            isListening = streamUiState.isListening,
+            isListening = streamUiState.isListening && !streamUiState.isDemoCommentaryMode,
             isAnalyzing = streamUiState.isAnalyzing,
             isSpeaking = streamUiState.isHankSpeaking,
+            readyLabel =
+                if (streamUiState.isDemoCommentaryMode) "Watching scene"
+                else "Hank's listening",
             modifier =
                 Modifier
                     .align(Alignment.BottomCenter)

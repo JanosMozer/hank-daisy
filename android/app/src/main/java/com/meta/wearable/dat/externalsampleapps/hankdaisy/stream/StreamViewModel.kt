@@ -72,6 +72,8 @@ class StreamViewModel(
 
   companion object {
     private const val TAG = "HankDaisy:StreamViewModel"
+    private const val DEMO_COMMENTARY_DELAY_MS = 2_800L
+    private const val NORMAL_AUTONOMOUS_DELAY_MS = 4_000L
     private val INITIAL_STATE = StreamUiState()
     private val SESSION_TERMINAL_STATES = setOf(StreamSessionState.CLOSED)
   }
@@ -98,7 +100,11 @@ class StreamViewModel(
   private var analyzeJob: Job? = null
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
+  private var demoLoopJob: Job? = null
   @Volatile private var demoCommentaryMode = false
+  @Volatile private var pendingDemoSceneChange = false
+  @Volatile private var lastDemoSpeechEndedAt = 0L
+  @Volatile private var wasDemoSpeaking = false
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
   @Volatile private var lastTurnAt: Long = 0L
@@ -106,9 +112,15 @@ class StreamViewModel(
   private val sceneWatcher =
       SceneChangeWatcher(
           onSettledAfterMotion = {
-            viewModelScope.launch { autonomousObservation() }
+            pendingDemoSceneChange = true
+            viewModelScope.launch {
+              autonomousObservation(
+                  force = true,
+                  demoTrigger = HankPromptFactory.DemoNarrationTrigger.SCENE_CHANGE,
+              )
+            }
           },
-          cooldownMs = 4_000L,
+          cooldownMs = DEMO_COMMENTARY_DELAY_MS,
       )
 
   private val bargeInDetector =
@@ -240,6 +252,8 @@ class StreamViewModel(
     observeTtsSpeaking()
     if (!demoCommentaryMode) {
       startWakeWordListening()
+    } else {
+      startDemoCommentaryLoop()
     }
     startSceneWatcher()
     startStreamInternal()
@@ -276,19 +290,29 @@ class StreamViewModel(
    * something relevant changed (user did a step, repositioned where asked,
    * a new issue is visible). Bypassed entirely when busy with another turn.
    */
-  private suspend fun autonomousObservation(force: Boolean = false) {
+  private suspend fun autonomousObservation(
+      force: Boolean = false,
+      demoTrigger: HankPromptFactory.DemoNarrationTrigger? = null,
+  ) {
     val frame = _uiState.value.videoFrame ?: return
     if (frame.isRecycled) return
     if (_uiState.value.isAnalyzing) return
     if (!demoCommentaryMode && _uiState.value.isListening) return
     if (glassesAudio.isSpeaking.value) return
     if (!demoCommentaryMode && conversationHistory.isEmpty()) return  // only auto-comment mid-convo
-    if (!force && System.currentTimeMillis() - lastTurnAt < 4_000L) return
+    val minDelayMs = if (demoCommentaryMode) DEMO_COMMENTARY_DELAY_MS else NORMAL_AUTONOMOUS_DELAY_MS
+    if (!force && System.currentTimeMillis() - lastTurnAt < minDelayMs) return
 
     val workDomain = currentWorkDomain()
+    val effectiveDemoTrigger =
+        if (demoCommentaryMode) {
+          demoTrigger ?: HankPromptFactory.DemoNarrationTrigger.FOLLOW_UP
+        } else {
+          null
+        }
     val prompt =
         if (demoCommentaryMode) {
-          HankPromptFactory.demoNarrationUserPrompt(workDomain)
+          HankPromptFactory.demoNarrationUserPrompt(workDomain, effectiveDemoTrigger!!)
         } else {
           HankPromptFactory.autonomousObservationPrompt(workDomain)
         }
@@ -308,11 +332,16 @@ class StreamViewModel(
                 return@launch
               }
           try {
+            if (demoCommentaryMode &&
+                effectiveDemoTrigger == HankPromptFactory.DemoNarrationTrigger.SCENE_CHANGE) {
+              pendingDemoSceneChange = false
+            }
             val response =
                 geminiService.analyzeFrame(
                     bitmap = frameCopy,
                     userQuestion = prompt,
-                    history = conversationHistory.toList(),
+                    history =
+                        if (demoCommentaryMode) emptyList() else conversationHistory.toList(),
                     systemPromptOverride = systemPromptOverride,
                 )
             val cleaned = response.trim().lowercase()
@@ -323,10 +352,12 @@ class StreamViewModel(
               Log.d(TAG, "Autonomous observation: Hank chose to stay quiet")
               return@launch
             }
-            // Append to conversation so subsequent user turns see this comment.
-            conversationHistory.add(GeminiService.Turn("assistant", response))
-            while (conversationHistory.size > 24) {
-              conversationHistory.removeAt(0)
+            if (!demoCommentaryMode) {
+              // Append to conversation so subsequent user turns see this comment.
+              conversationHistory.add(GeminiService.Turn("assistant", response))
+              while (conversationHistory.size > 24) {
+                conversationHistory.removeAt(0)
+              }
             }
             appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
             _uiState.update { it.copy(lastGeminiResponse = response) }
@@ -373,6 +404,34 @@ class StreamViewModel(
     _uiState.update { it.copy(isDemoCommentaryMode = demoCommentaryMode) }
   }
 
+  private fun startDemoCommentaryLoop() {
+    demoLoopJob?.cancel()
+    if (!demoCommentaryMode) return
+    demoLoopJob =
+        viewModelScope.launch {
+          while (isActive) {
+            delay(1_000L)
+            if (!demoCommentaryMode) continue
+            if (_uiState.value.isAnalyzing || glassesAudio.isSpeaking.value) continue
+            if (pendingDemoSceneChange) {
+              autonomousObservation(
+                  force = true,
+                  demoTrigger = HankPromptFactory.DemoNarrationTrigger.SCENE_CHANGE,
+              )
+              continue
+            }
+            val lastSpeechEndedAt = lastDemoSpeechEndedAt
+            if (lastSpeechEndedAt == 0L) continue
+            if (System.currentTimeMillis() - lastSpeechEndedAt < DEMO_COMMENTARY_DELAY_MS) continue
+            lastDemoSpeechEndedAt = System.currentTimeMillis()
+            autonomousObservation(
+                force = true,
+                demoTrigger = HankPromptFactory.DemoNarrationTrigger.FOLLOW_UP,
+            )
+          }
+        }
+  }
+
   private fun observeTtsSpeaking() {
     speakingJob?.cancel()
     speakingJob =
@@ -380,11 +439,16 @@ class StreamViewModel(
           glassesAudio.isSpeaking.collect { speaking ->
             _uiState.update { it.copy(isHankSpeaking = speaking) }
             if (demoCommentaryMode) {
+              if (wasDemoSpeaking && !speaking) {
+                lastDemoSpeechEndedAt = System.currentTimeMillis()
+              }
+              wasDemoSpeaking = speaking
               if (!speaking) {
                 bargeInDetector.stop()
               }
               return@collect
             }
+            wasDemoSpeaking = false
             // Mute the recognizer (it can't echo-cancel Hank's own voice) and
             // hand the mic to BargeInDetector, which CAN (via AEC).
             voiceCommand.setMuted(speaking)
@@ -533,7 +597,12 @@ class StreamViewModel(
     sceneJob = null
     try { autonomousJob?.cancel() } catch (_: Exception) {}
     autonomousJob = null
+    try { demoLoopJob?.cancel() } catch (_: Exception) {}
+    demoLoopJob = null
     demoCommentaryMode = false
+    pendingDemoSceneChange = false
+    lastDemoSpeechEndedAt = 0L
+    wasDemoSpeaking = false
     sceneWatcher.reset()
     conversationHistory.clear()
     lastTurnAt = 0L
@@ -638,7 +707,12 @@ class StreamViewModel(
   fun requestDemoCommentary() {
     if (!demoCommentaryMode) return
     if (_uiState.value.isAnalyzing || glassesAudio.isSpeaking.value) return
-    viewModelScope.launch { autonomousObservation(force = true) }
+    viewModelScope.launch {
+      autonomousObservation(
+          force = true,
+          demoTrigger = HankPromptFactory.DemoNarrationTrigger.MANUAL_START,
+      )
+    }
   }
 
   /** Append messages to the chat panel UI state, capped at 100 to stay light.

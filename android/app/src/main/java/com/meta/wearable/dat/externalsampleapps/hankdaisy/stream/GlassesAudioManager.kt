@@ -52,6 +52,7 @@ class GlassesAudioManager(private val context: Context) {
 
     companion object {
         private const val TAG = "HankDaisy:GlassesAudio"
+        private const val VOICE_SPEED_MULTIPLIER = 1.2f
 
         /**
          * Flip to false to bypass ElevenLabs and use Android TTS directly —
@@ -109,6 +110,7 @@ class GlassesAudioManager(private val context: Context) {
             TextToSpeech(context) { status ->
                 if (status == TextToSpeech.SUCCESS) {
                     tts?.language = Locale.US
+                    tts?.setSpeechRate(VOICE_SPEED_MULTIPLIER)
                     tts?.setAudioAttributes(
                         AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_MEDIA)

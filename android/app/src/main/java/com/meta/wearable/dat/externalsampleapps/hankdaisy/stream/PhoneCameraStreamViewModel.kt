@@ -64,6 +64,8 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
 
     companion object {
         private const val TAG = "HankDaisy:PhoneCameraStream"
+        private const val DEMO_COMMENTARY_DELAY_MS = 2_800L
+        private const val NORMAL_AUTONOMOUS_DELAY_MS = 4_000L
         private val INITIAL_STATE = PhoneCameraStreamUiState()
     }
 
@@ -98,7 +100,11 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
     private var analyzeJob: Job? = null
     private var sceneJob: Job? = null
     private var autonomousJob: Job? = null
+    private var demoLoopJob: Job? = null
     @Volatile private var demoCommentaryMode = false
+    @Volatile private var pendingDemoSceneChange = false
+    @Volatile private var lastDemoSpeechEndedAt = 0L
+    @Volatile private var wasDemoSpeaking = false
     private var lastFrameAt = 0L
 
     private val conversationHistory = mutableListOf<GeminiService.Turn>()
@@ -107,9 +113,15 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
     private val sceneWatcher =
         SceneChangeWatcher(
             onSettledAfterMotion = {
-                viewModelScope.launch { autonomousObservation() }
+                pendingDemoSceneChange = true
+                viewModelScope.launch {
+                    autonomousObservation(
+                        force = true,
+                        demoTrigger = HankPromptFactory.DemoNarrationTrigger.SCENE_CHANGE,
+                    )
+                }
             },
-            cooldownMs = 4_000L,
+            cooldownMs = DEMO_COMMENTARY_DELAY_MS,
         )
 
     private val bargeInDetector =
@@ -135,6 +147,8 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
         observeTtsSpeaking()
         if (!demoCommentaryMode) {
             startWakeWordListening()
+        } else {
+            startDemoCommentaryLoop()
         }
         startSceneWatcher()
         startPhoneCamera()
@@ -277,19 +291,30 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
             }
     }
 
-    private suspend fun autonomousObservation(force: Boolean = false) {
+    private suspend fun autonomousObservation(
+        force: Boolean = false,
+        demoTrigger: HankPromptFactory.DemoNarrationTrigger? = null,
+    ) {
         val frame = _uiState.value.videoFrame ?: return
         if (frame.isRecycled) return
         if (_uiState.value.isAnalyzing) return
         if (!demoCommentaryMode && _uiState.value.isListening) return
         if (audio.isSpeaking.value) return
         if (!demoCommentaryMode && conversationHistory.isEmpty()) return
-        if (!force && System.currentTimeMillis() - lastTurnAt < 4_000L) return
+        val minDelayMs =
+            if (demoCommentaryMode) DEMO_COMMENTARY_DELAY_MS else NORMAL_AUTONOMOUS_DELAY_MS
+        if (!force && System.currentTimeMillis() - lastTurnAt < minDelayMs) return
 
         val workDomain = currentWorkDomain()
+        val effectiveDemoTrigger =
+            if (demoCommentaryMode) {
+                demoTrigger ?: HankPromptFactory.DemoNarrationTrigger.FOLLOW_UP
+            } else {
+                null
+            }
         val prompt =
             if (demoCommentaryMode) {
-                HankPromptFactory.demoNarrationUserPrompt(workDomain)
+                HankPromptFactory.demoNarrationUserPrompt(workDomain, effectiveDemoTrigger!!)
             } else {
                 HankPromptFactory.autonomousObservationPrompt(workDomain)
             }
@@ -309,11 +334,17 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                         return@launch
                     }
                 try {
+                    if (demoCommentaryMode &&
+                        effectiveDemoTrigger == HankPromptFactory.DemoNarrationTrigger.SCENE_CHANGE) {
+                        pendingDemoSceneChange = false
+                    }
                     val response =
                         geminiService.analyzeFrame(
                             bitmap = frameCopy,
                             userQuestion = prompt,
-                            history = conversationHistory.toList(),
+                            history =
+                                if (demoCommentaryMode) emptyList()
+                                else conversationHistory.toList(),
                             systemPromptOverride = systemPromptOverride,
                         )
                     val cleaned = response.trim().lowercase()
@@ -321,8 +352,10 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                     if (cleaned.contains("<quiet>") || cleaned == "quiet" || cleaned.length < 6) {
                         return@launch
                     }
-                    conversationHistory.add(GeminiService.Turn("assistant", response))
-                    while (conversationHistory.size > 24) conversationHistory.removeAt(0)
+                    if (!demoCommentaryMode) {
+                        conversationHistory.add(GeminiService.Turn("assistant", response))
+                        while (conversationHistory.size > 24) conversationHistory.removeAt(0)
+                    }
                     appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
                     _uiState.update { it.copy(lastGeminiResponse = response) }
                     audio.speak(response)
@@ -357,6 +390,34 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
         _uiState.update { it.copy(isDemoCommentaryMode = demoCommentaryMode) }
     }
 
+    private fun startDemoCommentaryLoop() {
+        demoLoopJob?.cancel()
+        if (!demoCommentaryMode) return
+        demoLoopJob =
+            viewModelScope.launch {
+                while (isActive) {
+                    delay(1_000L)
+                    if (!demoCommentaryMode) continue
+                    if (_uiState.value.isAnalyzing || audio.isSpeaking.value) continue
+                    if (pendingDemoSceneChange) {
+                        autonomousObservation(
+                            force = true,
+                            demoTrigger = HankPromptFactory.DemoNarrationTrigger.SCENE_CHANGE,
+                        )
+                        continue
+                    }
+                    val lastSpeechEndedAt = lastDemoSpeechEndedAt
+                    if (lastSpeechEndedAt == 0L) continue
+                    if (System.currentTimeMillis() - lastSpeechEndedAt < DEMO_COMMENTARY_DELAY_MS) continue
+                    lastDemoSpeechEndedAt = System.currentTimeMillis()
+                    autonomousObservation(
+                        force = true,
+                        demoTrigger = HankPromptFactory.DemoNarrationTrigger.FOLLOW_UP,
+                    )
+                }
+            }
+    }
+
     private fun observeTtsSpeaking() {
         speakingJob?.cancel()
         speakingJob =
@@ -364,11 +425,16 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                 audio.isSpeaking.collect { speaking ->
                     _uiState.update { it.copy(isHankSpeaking = speaking) }
                     if (demoCommentaryMode) {
+                        if (wasDemoSpeaking && !speaking) {
+                            lastDemoSpeechEndedAt = System.currentTimeMillis()
+                        }
+                        wasDemoSpeaking = speaking
                         if (!speaking) {
                             bargeInDetector.stop()
                         }
                         return@collect
                     }
+                    wasDemoSpeaking = false
                     voiceCommand.setMuted(speaking)
                     if (speaking) {
                         delay(80)
@@ -436,7 +502,11 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
         analyzeJob?.cancel()
         sceneJob?.cancel()
         autonomousJob?.cancel()
+        demoLoopJob?.cancel()
         demoCommentaryMode = false
+        pendingDemoSceneChange = false
+        lastDemoSpeechEndedAt = 0L
+        wasDemoSpeaking = false
         conversationHistory.clear()
         lastTurnAt = 0L
         clearDraftChat()
@@ -467,7 +537,12 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
     fun requestDemoCommentary() {
         if (!demoCommentaryMode) return
         if (_uiState.value.isAnalyzing || audio.isSpeaking.value) return
-        viewModelScope.launch { autonomousObservation(force = true) }
+        viewModelScope.launch {
+            autonomousObservation(
+                force = true,
+                demoTrigger = HankPromptFactory.DemoNarrationTrigger.MANUAL_START,
+            )
+        }
     }
 
     fun cancelListening() {

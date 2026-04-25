@@ -117,9 +117,10 @@ fun StreamScreen(
     // Unified status pill — single cross-fading indicator so the
     // Listening → Thinking → Speaking → Ready transitions don't flicker.
     StatusPill(
-        isListening = streamUiState.isListening,
+        isListening = streamUiState.isListening && !streamUiState.isDemoCommentaryMode,
         isAnalyzing = streamUiState.isAnalyzing,
         isSpeaking = streamUiState.isHankSpeaking,
+        readyLabel = if (streamUiState.isDemoCommentaryMode) "Watching scene" else "Hank's listening",
         modifier =
             Modifier
                 .align(Alignment.BottomCenter)

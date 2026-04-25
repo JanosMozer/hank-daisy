@@ -11,6 +11,12 @@ package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 
 object HankPromptFactory {
+    enum class DemoNarrationTrigger {
+        MANUAL_START,
+        SCENE_CHANGE,
+        FOLLOW_UP,
+    }
+
     fun systemPrompt(workDomain: WorkDomain): String {
         val role =
             when (workDomain) {
@@ -120,7 +126,11 @@ object HankPromptFactory {
             You are Hank — $role speaking aloud through smart glasses in VISUAL DEMO MODE.
 
             There may be background noise, accents, or no reliable user speech at all. Do NOT wait for a spoken question.
-            Each time you are prompted, the camera view changed meaningfully and then settled. Your job is to keep the demo moving from the visuals alone.
+            Your job is to keep the demo moving from the visuals alone.
+
+            The current frame is the only authoritative visual context.
+            Do not stay anchored to the first image or to earlier frames.
+            If the visible object, area, or subject changes, immediately drop the old context and talk about the new relevant scene instead.
 
             Rules:
             - Briefly say what you are looking at, using only evidence visible in the frame. Focus on $visualFocus.
@@ -135,13 +145,23 @@ object HankPromptFactory {
         """.trimIndent()
     }
 
-    fun demoNarrationUserPrompt(workDomain: WorkDomain): String {
+    fun demoNarrationUserPrompt(
+        workDomain: WorkDomain,
+        trigger: DemoNarrationTrigger,
+    ): String {
         val domainLabel =
             when (workDomain) {
                 WorkDomain.CAR -> "car"
                 WorkDomain.BICYCLE -> "bike"
                 WorkDomain.GENERAL_PURPOSE -> "item"
             }
-        return "The view just changed. Keep the demo moving with a short spoken narration for this $domainLabel view."
+        return when (trigger) {
+            DemoNarrationTrigger.MANUAL_START ->
+                "Start the visual demo commentary for the current $domainLabel view. Treat this frame as the only visual context."
+            DemoNarrationTrigger.SCENE_CHANGE ->
+                "The scene changed significantly. Treat this as a fresh $domainLabel view, switch context immediately if the visible area is different, and give a short spoken narration for the new scene."
+            DemoNarrationTrigger.FOLLOW_UP ->
+                "Hank has been silent for about four seconds and the scene has not changed much. Add one short fresh follow-up for this same $domainLabel view: an extra fact, a common issue, a relevant code if applicable, or the next detail worth checking. Do not repeat the last description."
+        }
     }
 }

@@ -48,6 +48,7 @@ class ElevenLabsTtsService(
 ) {
     companion object {
         private const val TAG = "HankDaisy:ElevenLabs"
+        private const val VOICE_SPEED_MULTIPLIER = 1.2f
         // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms
         // first-chunk generation vs ~300ms for turbo). Slightly less
         // expressive but much faster for realtime conversation.
@@ -264,6 +265,7 @@ class ElevenLabsTtsService(
                             true
                         }
                         prepare()
+                        playbackParams = playbackParams.setSpeed(VOICE_SPEED_MULTIPLIER)
                         start()
                     }
                 currentPlayer = player
