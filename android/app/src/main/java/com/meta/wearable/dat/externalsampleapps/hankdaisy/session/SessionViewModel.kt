@@ -43,7 +43,7 @@ data class SessionsUiState(
      *  taps "Start diagnosis" inside an order; cleared after the next save. */
     val activeOrderId: String? = null,
     val currentTab: com.meta.wearable.dat.externalsampleapps.hankdaisy.ui.AppTab =
-        com.meta.wearable.dat.externalsampleapps.hankdaisy.ui.AppTab.CHATS,
+        com.meta.wearable.dat.externalsampleapps.hankdaisy.ui.AppTab.CONVOS,
 )
 
 class SessionViewModel(application: Application) : AndroidViewModel(application) {

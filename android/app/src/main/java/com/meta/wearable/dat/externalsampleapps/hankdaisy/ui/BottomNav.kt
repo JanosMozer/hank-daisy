@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun BottomNav(
     current: AppTab,
+    tabs: List<AppTab> = AppTab.values().toList(),
     onSelect: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -49,7 +50,7 @@ fun BottomNav(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            for (tab in AppTab.values()) {
+            for (tab in tabs) {
                 NavItem(
                     tab = tab,
                     selected = tab == current,

@@ -33,4 +33,13 @@ enum class AppTab(val label: String, val icon: ImageVector) {
     CHATS("Chats", Icons.Outlined.Forum),
     ORDERS("Orders", Icons.Outlined.Build),
     SETTINGS("Settings", Icons.Outlined.Settings),
+    ;
+
+    companion object {
+        // Demo branch starts by narrowing the shell to the live assist path
+        // plus settings, while leaving the deeper screens in history.
+        val demoTabs: List<AppTab> = listOf(CONVOS, SETTINGS)
+
+        fun coerceToDemo(tab: AppTab): AppTab = if (tab in demoTabs) tab else CONVOS
+    }
 }

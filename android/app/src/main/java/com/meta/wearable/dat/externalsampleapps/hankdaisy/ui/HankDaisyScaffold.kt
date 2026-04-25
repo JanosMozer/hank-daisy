@@ -58,9 +58,6 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GeminiService
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables.WearablesViewModel
 import kotlinx.coroutines.launch
 
-private fun initialsOf(name: String): String =
-    name.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HankDaisyScaffold(
@@ -229,7 +226,6 @@ fun HankDaisyScaffold(
               sessionVm.closeOrderDetail()
               MainTabs(
                   sessionVm = sessionVm,
-                  onOpenProfile = { sessionVm.openProfile() },
                   onStartStream = startGlassesStream,
                   isStreamingNow = uiState.isStreaming,
               )
@@ -262,7 +258,6 @@ fun HankDaisyScaffold(
               sessionVm.closeSession()
               MainTabs(
                   sessionVm = sessionVm,
-                  onOpenProfile = { sessionVm.openProfile() },
                   onStartStream = startGlassesStream,
                   isStreamingNow = uiState.isStreaming,
               )
@@ -271,7 +266,6 @@ fun HankDaisyScaffold(
           else ->
               MainTabs(
                   sessionVm = sessionVm,
-                  onOpenProfile = { sessionVm.openProfile() },
                   onStartStream = startGlassesStream,
                   isStreamingNow = uiState.isStreaming,
               )
@@ -329,66 +323,52 @@ fun HankDaisyScaffold(
 @Composable
 private fun MainTabs(
     sessionVm: SessionViewModel,
-    onOpenProfile: () -> Unit,
     onStartStream: () -> Unit,
     isStreamingNow: Boolean = false,
 ) {
   val state by sessionVm.uiState.collectAsStateWithLifecycle()
+  val selectedTab = AppTab.coerceToDemo(state.currentTab)
   Column(modifier = Modifier.fillMaxSize()) {
     Box(modifier = Modifier.weight(1f)) {
-      when (state.currentTab) {
-        AppTab.CONVOS ->
-            ConvosScreen(
-                onNewSession = onStartStream,
-                workDomain = state.settings.workDomain,
-                captureMode = state.settings.captureMode,
-                isStreaming = isStreamingNow,
-            )
-        AppTab.CHATS ->
-            SessionsHomeScreen(
-                sessions = state.sessions,
-                userInitials = initialsOf(state.userProfile.name),
-                avatarColor = state.userProfile.avatarColor,
-                onOpenSession = { sessionVm.openSession(it) },
-                onNewChatOnly = { sessionVm.openChatOnly() },
-                onOpenProfile = onOpenProfile,
-            )
-        AppTab.ORDERS ->
-            OrdersScreen(
-                orders = state.orders,
-                workDomain = state.settings.workDomain,
-                openSessionCount = { id -> state.sessions.count { it.orderId == id } },
-                onOpenOrder = { sessionVm.openOrder(it) },
-                onNewOrder = { sessionVm.openNewOrderSheet() },
-            )
-        AppTab.SETTINGS ->
-            SettingsScreen(
-                settings = state.settings,
-                onCaptureModeChange = {
-                  sessionVm.updateSettings(state.settings.copy(captureMode = it))
-                },
-                onSpeechRecognitionRouteChange = {
-                  sessionVm.updateSettings(state.settings.copy(speechRecognitionRoute = it))
-                },
-                onWorkDomainChange = {
-                  sessionVm.updateSettings(state.settings.copy(workDomain = it))
-                },
-                onDemoCommentaryModeChange = {
-                  sessionVm.updateSettings(state.settings.copy(demoCommentaryMode = it))
-                },
-                onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
-                onTextScaleChange = {
-                  sessionVm.updateSettings(state.settings.copy(textScale = it))
-                },
-                onHighContrastChange = {
-                  sessionVm.updateSettings(state.settings.copy(highContrast = it))
-                },
-                onHapticChange = {
-                  sessionVm.updateSettings(state.settings.copy(hapticFeedback = it))
-                },
-            )
+      if (selectedTab == AppTab.CONVOS) {
+        ConvosScreen(
+            onNewSession = onStartStream,
+            workDomain = state.settings.workDomain,
+            captureMode = state.settings.captureMode,
+            isStreaming = isStreamingNow,
+        )
+      } else {
+        SettingsScreen(
+            settings = state.settings,
+            onCaptureModeChange = {
+              sessionVm.updateSettings(state.settings.copy(captureMode = it))
+            },
+            onSpeechRecognitionRouteChange = {
+              sessionVm.updateSettings(state.settings.copy(speechRecognitionRoute = it))
+            },
+            onWorkDomainChange = {
+              sessionVm.updateSettings(state.settings.copy(workDomain = it))
+            },
+            onDemoCommentaryModeChange = {
+              sessionVm.updateSettings(state.settings.copy(demoCommentaryMode = it))
+            },
+            onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
+            onTextScaleChange = {
+              sessionVm.updateSettings(state.settings.copy(textScale = it))
+            },
+            onHighContrastChange = {
+              sessionVm.updateSettings(state.settings.copy(highContrast = it))
+            },
+            onHapticChange = {
+              sessionVm.updateSettings(state.settings.copy(hapticFeedback = it))
+            },
+        )
       }
     }
-    BottomNav(current = state.currentTab, onSelect = { sessionVm.selectTab(it) })
+    BottomNav(
+        current = selectedTab,
+        tabs = AppTab.demoTabs,
+        onSelect = { sessionVm.selectTab(AppTab.coerceToDemo(it)) },
+    )
   }
 }
