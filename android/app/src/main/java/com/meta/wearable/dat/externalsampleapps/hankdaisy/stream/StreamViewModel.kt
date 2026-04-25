@@ -45,6 +45,7 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.DeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.session.Session
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables.WearablesViewModel
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -87,7 +88,7 @@ class StreamViewModel(
   private var sessionStateJob: Job? = null
   private var stream: Stream? = null
   private val liveStreamServer = LiveStreamServer(8080)
-  private val geminiService = GeminiService()
+  private val geminiService = GeminiService(application)
   private val glassesAudio = GlassesAudioManager(application)
   private val voiceCommand = VoiceCommandManager(application)
   private var voiceJob: Job? = null
@@ -97,6 +98,7 @@ class StreamViewModel(
   private var analyzeJob: Job? = null
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
+  @Volatile private var demoCommentaryMode = false
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
   @Volatile private var lastTurnAt: Long = 0L
@@ -106,6 +108,7 @@ class StreamViewModel(
           onSettledAfterMotion = {
             viewModelScope.launch { autonomousObservation() }
           },
+          cooldownMs = 4_000L,
       )
 
   private val bargeInDetector =
@@ -202,6 +205,7 @@ class StreamViewModel(
         )
     presentationQueue = queue
     queue.start()
+    refreshActiveModes()
     if (session == null) {
       try {
         Wearables.createSession(deviceSelector)
@@ -234,7 +238,9 @@ class StreamViewModel(
     glassesAudio.enableGlassesMic()
     observeGlassesAudio()
     observeTtsSpeaking()
-    startWakeWordListening()
+    if (!demoCommentaryMode) {
+      startWakeWordListening()
+    }
     startSceneWatcher()
     startStreamInternal()
   }
@@ -270,29 +276,24 @@ class StreamViewModel(
    * something relevant changed (user did a step, repositioned where asked,
    * a new issue is visible). Bypassed entirely when busy with another turn.
    */
-  private suspend fun autonomousObservation() {
+  private suspend fun autonomousObservation(force: Boolean = false) {
     val frame = _uiState.value.videoFrame ?: return
     if (frame.isRecycled) return
     if (_uiState.value.isAnalyzing) return
-    if (_uiState.value.isListening) return
+    if (!demoCommentaryMode && _uiState.value.isListening) return
     if (glassesAudio.isSpeaking.value) return
-    if (conversationHistory.isEmpty()) return  // only auto-comment mid-convo
-    if (System.currentTimeMillis() - lastTurnAt < 4_000L) return
+    if (!demoCommentaryMode && conversationHistory.isEmpty()) return  // only auto-comment mid-convo
+    if (!force && System.currentTimeMillis() - lastTurnAt < 4_000L) return
 
+    val workDomain = currentWorkDomain()
     val prompt =
-        "(System note: the camera moved; here's the new view.) React ONLY if " +
-            "it's directly relevant to the conversation so far. " +
-            "1) If the current conversation is NOT about something automotive or " +
-            "what's visible, or the new view is unrelated (a wall, a person, a " +
-            "room, background) — reply with just: <quiet>. Do not describe the " +
-            "scene unprompted. " +
-            "2) If the user has VISIBLY completed the step you just gave them, " +
-            "give the NEXT single step now (one sentence, then stop). " +
-            "3) If they repositioned where you asked but the step isn't done " +
-            "yet, say one short sentence to acknowledge or guide them. " +
-            "4) If something genuinely concerning is visible (new problem, " +
-            "danger), say one short sentence about it. " +
-            "5) Otherwise — reply with just: <quiet>."
+        if (demoCommentaryMode) {
+          HankPromptFactory.demoNarrationUserPrompt(workDomain)
+        } else {
+          HankPromptFactory.autonomousObservationPrompt(workDomain)
+        }
+    val systemPromptOverride =
+        if (demoCommentaryMode) HankPromptFactory.demoNarrationSystemPrompt(workDomain) else null
 
     autonomousJob?.cancel()
     autonomousJob =
@@ -308,7 +309,12 @@ class StreamViewModel(
               }
           try {
             val response =
-                geminiService.analyzeFrame(frameCopy, prompt, conversationHistory.toList())
+                geminiService.analyzeFrame(
+                    bitmap = frameCopy,
+                    userQuestion = prompt,
+                    history = conversationHistory.toList(),
+                    systemPromptOverride = systemPromptOverride,
+                )
             val cleaned = response.trim().lowercase()
             _uiState.update { it.copy(isAnalyzing = false) }
             if (cleaned.contains("<quiet>") ||
@@ -347,12 +353,38 @@ class StreamViewModel(
         }
   }
 
+  private fun currentWorkDomain(): WorkDomain = WorkDomain.current(getApplication())
+
+  private fun currentDemoCommentaryMode(): Boolean {
+    return try {
+      val raw =
+          getApplication<Application>()
+              .getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
+              .getString("settings_json", null)
+      if (raw == null) false
+      else org.json.JSONObject(raw).optBoolean("demoCommentaryMode", false)
+    } catch (_: Exception) {
+      false
+    }
+  }
+
+  private fun refreshActiveModes() {
+    demoCommentaryMode = currentDemoCommentaryMode()
+    _uiState.update { it.copy(isDemoCommentaryMode = demoCommentaryMode) }
+  }
+
   private fun observeTtsSpeaking() {
     speakingJob?.cancel()
     speakingJob =
         viewModelScope.launch {
           glassesAudio.isSpeaking.collect { speaking ->
             _uiState.update { it.copy(isHankSpeaking = speaking) }
+            if (demoCommentaryMode) {
+              if (!speaking) {
+                bargeInDetector.stop()
+              }
+              return@collect
+            }
             // Mute the recognizer (it can't echo-cancel Hank's own voice) and
             // hand the mic to BargeInDetector, which CAN (via AEC).
             voiceCommand.setMuted(speaking)
@@ -501,6 +533,7 @@ class StreamViewModel(
     sceneJob = null
     try { autonomousJob?.cancel() } catch (_: Exception) {}
     autonomousJob = null
+    demoCommentaryMode = false
     sceneWatcher.reset()
     conversationHistory.clear()
     lastTurnAt = 0L
@@ -600,6 +633,12 @@ class StreamViewModel(
     if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
     _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
     voiceCommand.startManualListen()
+  }
+
+  fun requestDemoCommentary() {
+    if (!demoCommentaryMode) return
+    if (_uiState.value.isAnalyzing || glassesAudio.isSpeaking.value) return
+    viewModelScope.launch { autonomousObservation(force = true) }
   }
 
   /** Append messages to the chat panel UI state, capped at 100 to stay light.

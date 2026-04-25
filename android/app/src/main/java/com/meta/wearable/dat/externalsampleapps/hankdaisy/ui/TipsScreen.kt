@@ -25,9 +25,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 
 @Composable
-fun TipsScreen(modifier: Modifier = Modifier) {
+fun TipsScreen(
+    workDomain: WorkDomain,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier =
             modifier
@@ -53,10 +57,7 @@ fun TipsScreen(modifier: Modifier = Modifier) {
 
         Tip(
             title = "Just start talking",
-            body =
-                "No wake word needed. Once a live stream is open, Hank is " +
-                    "always listening. Ask anything — if you're not looking " +
-                    "at a car, he'll answer as a normal chat.",
+            body = workDomain.firstTipBody(),
         )
         Tip(
             title = "Interrupt him anytime",

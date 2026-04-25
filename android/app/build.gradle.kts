@@ -85,6 +85,9 @@ android {
 
 dependencies {
   implementation(libs.androidx.activity.compose)
+  implementation(libs.androidx.camera.camera2)
+  implementation(libs.androidx.camera.core)
+  implementation(libs.androidx.camera.lifecycle)
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.exifinterface)
   implementation(libs.androidx.lifecycle.runtime.compose)

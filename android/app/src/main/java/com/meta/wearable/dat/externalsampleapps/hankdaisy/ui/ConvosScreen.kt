@@ -36,16 +36,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 import kotlinx.coroutines.delay
 
 /**
- * Landing tab for starting a live, glasses-mediated conversation.
+ * Landing tab for starting a live camera conversation with Hank.
  * Minimal UI: a hero block explaining what this is, then a prominent
  * purple "+" FAB anchored at the bottom-center to start the call.
  */
 @Composable
 fun ConvosScreen(
     onNewSession: () -> Unit,
+    workDomain: WorkDomain,
+    captureMode: CaptureMode,
     /** True once navigateToStreaming has set isStreaming=true. If it stays
      * false for too long after a tap, we surface an error so the user
      * knows the stream never actually kicked off. */
@@ -54,6 +58,43 @@ fun ConvosScreen(
 ) {
     var starting by remember { mutableStateOf(false) }
     var timedOut by remember { mutableStateOf(false) }
+    val usingPhoneCamera = captureMode == CaptureMode.PHONE_CAMERA
+    val convoSubtitle =
+        if (usingPhoneCamera) {
+            when (workDomain) {
+                WorkDomain.CAR -> "Live car repair calls with Hank, through your phone camera."
+                WorkDomain.BICYCLE ->
+                    "Live bicycle repair calls with Hank, through your phone camera."
+                WorkDomain.GENERAL_PURPOSE ->
+                    "Live hands-free repair calls with Hank, through your phone camera."
+            }
+        } else {
+            workDomain.convoSubtitle
+        }
+    val convoBody =
+        if (usingPhoneCamera) {
+            "Starts the live stream from your phone camera and opens the voice loop " +
+                "with Hank. He sees what you see and guides you through ${workDomain.workDescriptor()} " +
+                "one step at a time."
+        } else {
+            workDomain.convoBody()
+        }
+    val supportingText =
+        if (usingPhoneCamera) {
+            "Past conversations show up under the Chats tab. Switch back to Ray-Ban Meta " +
+                "glasses from Settings anytime."
+        } else {
+            "Past conversations show up under the Chats tab. To talk to Hank without the " +
+                "glasses, use the Chats tab's + button."
+        }
+    val timeoutText =
+        if (usingPhoneCamera) {
+            "Couldn't start the phone camera. Check that Camera and Microphone permissions " +
+                "are granted, then tap + again."
+        } else {
+            "Couldn't start the glasses stream. Check that your Ray-Ban Meta is paired in " +
+                "the Meta AI app and Camera permission is granted, then tap + again."
+        }
 
     // If the scaffold flips to streaming, the whole screen swaps to
     // StreamScreen; this state just resets so the overlay is gone on return.
@@ -91,7 +132,7 @@ fun ConvosScreen(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Live calls with Hank, through your glasses.",
+                text = convoSubtitle,
                 color = AppColors.TextSecondary,
                 fontSize = 13.sp,
             )
@@ -114,18 +155,13 @@ fun ConvosScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text =
-                        "Starts the live stream from your Ray-Ban Meta glasses and " +
-                            "opens the voice loop with Hank. He sees what you see " +
-                            "and listens the whole time — just start talking.",
+                    text = convoBody,
                     color = AppColors.TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                 )
                 Text(
-                    text =
-                        "Past conversations show up under the Chats tab. To talk to " +
-                            "Hank without the glasses, use the Chats tab's + button.",
+                    text = supportingText,
                     color = AppColors.TextMuted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
@@ -201,10 +237,7 @@ fun ConvosScreen(
                         .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
-                    text =
-                        "Couldn't start the glasses stream. Check that your Ray-Ban Meta is " +
-                            "paired in the Meta AI app and Camera permission is granted, then " +
-                            "tap + again.",
+                    text = timeoutText,
                     color = androidx.compose.ui.graphics.Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,

@@ -11,14 +11,15 @@ Developers can access our SDK and documentation, test on supported AI glasses, a
 
 ## HankDaisy Project Layout
 
-This repo now carries two Android app variants:
+This repo now carries a single Android HankDaisy app in [`android/`](android/).
+
+That app supports both camera sources behind one settings toggle:
 
 | Folder | Camera source | External requirements | Use it when |
 |--------|---------------|-----------------------|-------------|
-| `android/` | Meta glasses through the Meta Wearables DAT SDK | Meta AI app, DAT registration, Camera permission for the glasses, and GitHub Packages access for DAT dependencies | You want the original glasses-connected HankDaisy app. |
-| `android-no-glasses/` | Android system camera through CameraX | Normal Android camera/microphone permissions only | You want the same HankDaisy demos without pairing Meta glasses. |
+| `android/` | Ray-Ban Meta glasses through DAT or the Android phone camera through CameraX | DAT setup is only needed for glasses mode; phone-camera mode uses normal Android camera/microphone permissions | You want the full HankDaisy app with both glasses and no-glasses operation in one build. |
 
-The no-glasses variant keeps the Hank voice loop, chats, repair orders, summaries, exports, reports, and photo capture flow, but replaces the glasses stream with the phone camera. See [`android-no-glasses/README.md`](android-no-glasses/README.md) for its build command and local model/TTS configuration.
+The merged app keeps the richer glasses feature set, including live Hank voice guidance, chats, repair orders, summaries, exports, reports, work-domain switching (`car`, `bicycle`, `general`), and visual commentary mode with no audio input.
 
 ## Documentation & Community
 

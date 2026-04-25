@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.OrderStatus
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.RepairOrder
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.displayName
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -51,6 +53,7 @@ import java.util.Locale
 @Composable
 fun OrdersScreen(
     orders: List<RepairOrder>,
+    workDomain: WorkDomain,
     openSessionCount: (String) -> Int,
     onOpenOrder: (String) -> Unit,
     onNewOrder: () -> Unit,
@@ -96,7 +99,7 @@ fun OrdersScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Tap + to create a new repair order.",
+                            text = "Tap + to create a new ${workDomain.orderDocumentLabel.lowercase()}.",
                             color = AppColors.TextSecondary,
                             fontSize = 13.sp,
                         )
@@ -110,6 +113,7 @@ fun OrdersScreen(
                     items(orders, key = { it.id }) { o ->
                         OrderCard(
                             order = o,
+                            workDomain = workDomain,
                             sessionCount = openSessionCount(o.id),
                             onClick = { onOpenOrder(o.id) },
                         )
@@ -142,6 +146,7 @@ fun OrdersScreen(
 @Composable
 private fun OrderCard(
     order: RepairOrder,
+    workDomain: WorkDomain,
     sessionCount: Int,
     onClick: () -> Unit,
 ) {
@@ -161,7 +166,7 @@ private fun OrderCard(
             verticalAlignment = Alignment.Top,
         ) {
             Text(
-                text = order.vehicleDisplay,
+                text = order.displayName(workDomain),
                 color = AppColors.TextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -182,8 +187,8 @@ private fun OrderCard(
         ) {
             Text(
                 text =
-                    if (sessionCount == 0) "No diagnostic sessions yet"
-                    else "$sessionCount diagnostic ${if (sessionCount == 1) "session" else "sessions"}",
+                    if (sessionCount == 0) "No sessions yet"
+                    else "$sessionCount ${if (sessionCount == 1) "session" else "sessions"}",
                 color = AppColors.TextMuted,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,

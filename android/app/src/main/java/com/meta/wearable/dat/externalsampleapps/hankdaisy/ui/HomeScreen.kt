@@ -12,6 +12,7 @@
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 
+import androidx.compose.foundation.clickable
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,7 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables.WearablesVie
 @Composable
 fun HomeScreen(
     viewModel: WearablesViewModel,
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
   val scrollState = rememberScrollState()
@@ -116,6 +118,12 @@ fun HomeScreen(
             activity?.let { viewModel.startRegistration(it) }
                 ?: Toast.makeText(context, "Activity not available", Toast.LENGTH_SHORT).show()
           },
+      )
+      Text(
+          text = "Need phone-only mode? Open Settings.",
+          color = AppColors.Accent,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenSettings),
       )
     }
   }

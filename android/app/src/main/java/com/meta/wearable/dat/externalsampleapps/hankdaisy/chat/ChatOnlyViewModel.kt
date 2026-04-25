@@ -64,7 +64,7 @@ class ChatOnlyViewModel(application: Application) : AndroidViewModel(application
 
     private val voiceCommand = VoiceCommandManager(application)
     private val glassesAudio = GlassesAudioManager(application)
-    private val gemini = GeminiService()
+    private val gemini = GeminiService(application)
 
     private val _uiState = MutableStateFlow(ChatOnlyUiState())
     val uiState: StateFlow<ChatOnlyUiState> = _uiState.asStateFlow()

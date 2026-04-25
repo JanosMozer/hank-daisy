@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.RepairOrder
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 
 /**
  * Full-screen form for creating a new repair order. We keep the visual
@@ -51,6 +52,7 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.RepairOrder
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewOrderScreen(
+    workDomain: WorkDomain,
     onCancel: () -> Unit,
     onCreate: (RepairOrder) -> Unit,
     modifier: Modifier = Modifier,
@@ -65,7 +67,17 @@ fun NewOrderScreen(
     var presentingIssue by remember { mutableStateOf("") }
 
     val canCreate =
-        listOf(vehicleMake, vehicleModel, customerName, presentingIssue).any { it.isNotBlank() }
+        listOf(
+                vehicleYear,
+                vehicleMake,
+                vehicleModel,
+                vehicleVin,
+                licensePlate,
+                customerName,
+                customerPhone,
+                presentingIssue,
+            )
+            .any { it.isNotBlank() }
 
     Column(
         modifier =
@@ -92,7 +104,7 @@ fun NewOrderScreen(
                 modifier = Modifier.clickable(onClick = onCancel),
             )
             Text(
-                text = "New order",
+                text = "New ${workDomain.orderDocumentLabel.lowercase()}",
                 color = AppColors.TextPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -128,16 +140,16 @@ fun NewOrderScreen(
                     .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            FormSection(title = "Vehicle") {
+            FormSection(title = workDomain.orderSectionTitle) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Field(
-                        label = "Year",
+                        label = workDomain.firstFieldLabel,
                         value = vehicleYear,
                         onChange = { vehicleYear = it },
                         modifier = Modifier.weight(1f),
                     )
                     Field(
-                        label = "Make",
+                        label = workDomain.secondFieldLabel,
                         value = vehicleMake,
                         onChange = { vehicleMake = it },
                         modifier = Modifier.weight(1.4f),
@@ -145,21 +157,21 @@ fun NewOrderScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Field(
-                    label = "Model",
+                    label = workDomain.thirdFieldLabel,
                     value = vehicleModel,
                     onChange = { vehicleModel = it },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 Field(
-                    label = "VIN (optional)",
+                    label = "${workDomain.primaryIdLabel} (optional)",
                     value = vehicleVin,
                     onChange = { vehicleVin = it },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
                 Field(
-                    label = "License plate (optional)",
+                    label = "${workDomain.secondaryIdLabel} (optional)",
                     value = licensePlate,
                     onChange = { licensePlate = it },
                     modifier = Modifier.fillMaxWidth(),

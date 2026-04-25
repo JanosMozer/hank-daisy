@@ -21,6 +21,8 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.DiagnosisOutco
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.OrderStatus
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.RepairOrder
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.Session
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.displayName
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.ChatMessage
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GeminiService
 import java.io.File
@@ -60,19 +62,20 @@ object OrderReportPdf {
         context: Context,
         order: RepairOrder,
         sessions: List<Session>,
+        workDomain: WorkDomain,
         gemini: GeminiService,
     ) {
         // 1. Build per-session summaries (best-effort).
         val perSession: List<Pair<Session, String>> =
             sessions.map { session ->
-                val summary = summariseSession(gemini, session)
+                val summary = summariseSession(gemini, session, workDomain)
                 session to summary
             }
 
         // 2. Build an overall closing synthesis (best-effort). Runs against
         //    the concatenation of every per-session summary so Gemini has
         //    the full picture even when individual transcripts are short.
-        val closing = closingSynthesis(gemini, order, perSession)
+        val closing = closingSynthesis(gemini, order, perSession, workDomain)
 
         try {
             val dir = File(context.cacheDir, "orders")
@@ -91,11 +94,11 @@ object OrderReportPdf {
             // --- COVER ---
             canvas.drawText("HANK & DAISY", MARGIN, y + 12f, paints.brandSmall)
             y += 20f
-            canvas.drawText("Repair order report", MARGIN, y + 16f, paints.title)
+            canvas.drawText("${workDomain.orderDocumentLabel} report", MARGIN, y + 16f, paints.title)
             y += 30f
 
             // Vehicle + status header row.
-            canvas.drawText(order.vehicleDisplay, MARGIN, y, paints.heading)
+            canvas.drawText(order.displayName(workDomain), MARGIN, y, paints.heading)
             y += 16f
             canvas.drawText(
                 "Status: ${order.status.label}" +
@@ -111,8 +114,12 @@ object OrderReportPdf {
             if (order.vehicleVin.isNotBlank() || order.licensePlate.isNotBlank()) {
                 val plateLine =
                     listOf(
-                            if (order.vehicleVin.isNotBlank()) "VIN: ${order.vehicleVin}" else null,
-                            if (order.licensePlate.isNotBlank()) "Plate: ${order.licensePlate}" else null,
+                            if (order.vehicleVin.isNotBlank()) {
+                                "${workDomain.primaryIdLabel}: ${order.vehicleVin}"
+                            } else null,
+                            if (order.licensePlate.isNotBlank()) {
+                                "${workDomain.secondaryIdLabel}: ${order.licensePlate}"
+                            } else null,
                         )
                         .filterNotNull()
                         .joinToString("   ·   ")
@@ -160,9 +167,9 @@ object OrderReportPdf {
             y += 14f
             val statLines =
                 listOf(
-                    "Diagnostic sessions: ${sessions.size}",
+                    "${workDomain.sessionStatsLabel}: ${sessions.size}",
                     "Total time on job: ${formatDuration(totalDurationMs)}",
-                    "Diagnoses recorded: ${diagnoses.size}" +
+                    "Findings recorded: ${diagnoses.size}" +
                         if (diagnoses.isEmpty()) ""
                         else "   (passed: $passed, failed: $failed, pending: $pending)",
                 )
@@ -260,7 +267,7 @@ object OrderReportPdf {
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(
                         Intent.EXTRA_SUBJECT,
-                        "Repair order — ${order.vehicleDisplay}",
+                        "${workDomain.orderDocumentLabel} — ${order.displayName(workDomain)}",
                     )
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
@@ -276,12 +283,16 @@ object OrderReportPdf {
 
     // ---- helpers ----
 
-    private suspend fun summariseSession(gemini: GeminiService, session: Session): String {
+    private suspend fun summariseSession(
+        gemini: GeminiService,
+        session: Session,
+        workDomain: WorkDomain,
+    ): String {
         if (session.messages.isEmpty()) return "(no turns recorded)"
         val prompt =
-            "Summarise the following Hank session in 2-3 sentences for a repair " +
-                "order report. Focus on what was observed, what was recommended, " +
-                "and what the outcome was. No markdown, plain text."
+            "Summarise the following Hank session in 2-3 sentences for a " +
+                "${workDomain.orderDocumentLabel.lowercase()} report. Focus on what was observed, " +
+                "what was recommended, and what the outcome was. No markdown, plain text."
         val history =
             session.messages.map { m ->
                 GeminiService.Turn(
@@ -301,9 +312,10 @@ object OrderReportPdf {
         gemini: GeminiService,
         order: RepairOrder,
         perSession: List<Pair<Session, String>>,
+        workDomain: WorkDomain,
     ): String {
         if (perSession.isEmpty()) {
-            return "No diagnostic sessions were run against this order. " +
+            return "No guided sessions were run against this order. " +
                 "Presenting issue: ${order.presentingIssue.ifBlank { "not specified" }}."
         }
         val bundled =
@@ -311,15 +323,15 @@ object OrderReportPdf {
                 "Session ${fmt(s.createdAt)}: $summary"
             }
         val prompt =
-            "You are Hank writing the closing report on repair order " +
-                "\"${order.vehicleDisplay}\" for " +
+            "You are Hank writing the closing report on ${workDomain.orderDocumentLabel.lowercase()} " +
+                "\"${order.displayName(workDomain)}\" for " +
                 (order.customerName.ifBlank { "the customer" }) +
                 ". Presenting issue: ${order.presentingIssue.ifBlank { "not specified" }}. " +
                 "Status: ${order.status.label}. " +
-                "Below are notes from the diagnostic sessions run:\n\n" +
+                "Below are notes from the guided sessions run:\n\n" +
                 bundled +
-                "\n\nWrite a concise (4-6 sentence) closing report that states what was diagnosed, " +
-                "what was resolved, and what still needs attention. Professional tone, plain text, " +
+                "\n\nWrite a concise (4-6 sentence) closing report that states what was diagnosed " +
+                "or identified, what was resolved, and what still needs attention. Professional tone, plain text, " +
                 "no markdown, no headings. Lead with the verdict."
         return try {
             gemini.analyzeFrame(bitmap = null, userQuestion = prompt, history = emptyList())

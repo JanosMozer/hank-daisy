@@ -135,7 +135,7 @@ fun ProfileScreen(
             Spacer(Modifier.height(10.dp))
             Field("Pronouns", pronouns, { pronouns = it }, placeholder = "they/them, she/her, …")
             Spacer(Modifier.height(10.dp))
-            Field("Role", role, { role = it }, placeholder = "Lead mechanic, dad, hobbyist…")
+            Field("Role", role, { role = it }, placeholder = "Lead tech, bike wrench, hobbyist…")
             Spacer(Modifier.height(10.dp))
             Field("Email", email, { email = it })
             Spacer(Modifier.height(10.dp))

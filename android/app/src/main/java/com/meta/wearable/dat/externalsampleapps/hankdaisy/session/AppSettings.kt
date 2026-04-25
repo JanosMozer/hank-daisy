@@ -18,8 +18,11 @@ enum class TextScale(val factor: Float, val label: String) {
 }
 
 data class AppSettings(
+    val captureMode: CaptureMode = CaptureMode.GLASSES,
+    val workDomain: WorkDomain = WorkDomain.CAR,
     val themeMode: ThemeMode = ThemeMode.LIGHT,
     val textScale: TextScale = TextScale.NORMAL,
     val highContrast: Boolean = false,
     val hapticFeedback: Boolean = true,
+    val demoCommentaryMode: Boolean = false,
 )

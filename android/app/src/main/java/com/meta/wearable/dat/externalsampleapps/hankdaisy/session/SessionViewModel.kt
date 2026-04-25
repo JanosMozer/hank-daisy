@@ -60,7 +60,7 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     private val prefs =
         application.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private val gemini = GeminiService()
+    private val gemini = GeminiService(application)
 
     private val _uiState =
         MutableStateFlow(
@@ -221,10 +221,19 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
         return try {
             val o = JSONObject(raw)
             AppSettings(
+                captureMode =
+                    CaptureMode.fromStored(
+                        o.optString(CaptureMode.KEY_CAPTURE_MODE, CaptureMode.GLASSES.name),
+                    ),
+                workDomain =
+                    WorkDomain.fromStored(
+                        o.optString(WorkDomain.KEY_WORK_DOMAIN, WorkDomain.CAR.name),
+                    ),
                 themeMode = ThemeMode.valueOf(o.optString("theme", "LIGHT")),
                 textScale = TextScale.valueOf(o.optString("textScale", "NORMAL")),
                 highContrast = o.optBoolean("highContrast", false),
                 hapticFeedback = o.optBoolean("hapticFeedback", true),
+                demoCommentaryMode = o.optBoolean("demoCommentaryMode", false),
             )
         } catch (_: Exception) {
             AppSettings()
@@ -234,10 +243,13 @@ class SessionViewModel(application: Application) : AndroidViewModel(application)
     private fun persistSettings(s: AppSettings) {
         val o =
             JSONObject()
+                .put(CaptureMode.KEY_CAPTURE_MODE, s.captureMode.name)
+                .put(WorkDomain.KEY_WORK_DOMAIN, s.workDomain.name)
                 .put("theme", s.themeMode.name)
                 .put("textScale", s.textScale.name)
                 .put("highContrast", s.highContrast)
                 .put("hapticFeedback", s.hapticFeedback)
+                .put("demoCommentaryMode", s.demoCommentaryMode)
         prefs.edit().putString(KEY_SETTINGS, o.toString()).apply()
     }
 

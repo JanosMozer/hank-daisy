@@ -46,15 +46,20 @@ import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.OrderStatus
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.RepairOrder
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.Session
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.displayName
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private enum class DetailTab(val label: String) {
-    OVERVIEW("Overview"),
-    DIAGNOSIS("Diagnosis"),
-    NOTES("Notes"),
-}
+private enum class DetailTab { OVERVIEW, DIAGNOSIS, NOTES }
+
+private fun DetailTab.label(workDomain: WorkDomain): String =
+    when (this) {
+        DetailTab.OVERVIEW -> "Overview"
+        DetailTab.DIAGNOSIS -> workDomain.sessionTabLabel
+        DetailTab.NOTES -> "Notes"
+    }
 
 /**
  * Full-screen detail view for a single [RepairOrder].
@@ -68,6 +73,7 @@ private enum class DetailTab(val label: String) {
 @Composable
 fun OrderDetailScreen(
     order: RepairOrder,
+    workDomain: WorkDomain,
     sessions: List<Session>,
     onBack: () -> Unit,
     onStartDiagnosis: () -> Unit,
@@ -90,14 +96,15 @@ fun OrderDetailScreen(
                 .navigationBarsPadding()
                 .imePadding(),
     ) {
-        TopBar(order = order, onBack = onBack)
-        TabBar(current = tab, onSelect = { tab = it })
+        TopBar(order = order, workDomain = workDomain, onBack = onBack)
+        TabBar(current = tab, workDomain = workDomain, onSelect = { tab = it })
 
         Box(modifier = Modifier.weight(1f)) {
             when (tab) {
                 DetailTab.OVERVIEW ->
                     OverviewTab(
                         order = order,
+                        workDomain = workDomain,
                         sessionCount = sessions.size,
                         onStartDiagnosis = onStartDiagnosis,
                         onCloseOrder = onCloseOrder,
@@ -108,6 +115,7 @@ fun OrderDetailScreen(
                 DetailTab.DIAGNOSIS ->
                     DiagnosisTab(
                         order = order,
+                        workDomain = workDomain,
                         sessions = sessions,
                         onOpenSession = onOpenSession,
                     )
@@ -122,7 +130,7 @@ fun OrderDetailScreen(
 }
 
 @Composable
-private fun TopBar(order: RepairOrder, onBack: () -> Unit) {
+private fun TopBar(order: RepairOrder, workDomain: WorkDomain, onBack: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -136,7 +144,7 @@ private fun TopBar(order: RepairOrder, onBack: () -> Unit) {
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = order.vehicleDisplay,
+                text = order.displayName(workDomain),
                 color = AppColors.TextPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -157,7 +165,11 @@ private fun TopBar(order: RepairOrder, onBack: () -> Unit) {
 }
 
 @Composable
-private fun TabBar(current: DetailTab, onSelect: (DetailTab) -> Unit) {
+private fun TabBar(
+    current: DetailTab,
+    workDomain: WorkDomain,
+    onSelect: (DetailTab) -> Unit,
+) {
     Row(
         modifier =
             Modifier
@@ -175,7 +187,7 @@ private fun TabBar(current: DetailTab, onSelect: (DetailTab) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = t.label,
+                    text = t.label(workDomain),
                     color = if (selected) AppColors.Accent else AppColors.TextSecondary,
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
@@ -200,6 +212,7 @@ private fun TabBar(current: DetailTab, onSelect: (DetailTab) -> Unit) {
 @Composable
 private fun OverviewTab(
     order: RepairOrder,
+    workDomain: WorkDomain,
     sessionCount: Int,
     onStartDiagnosis: () -> Unit,
     onCloseOrder: () -> Unit,
@@ -229,7 +242,7 @@ private fun OverviewTab(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Start diagnosis",
+                    text = workDomain.primaryActionLabel,
                     color = AppColors.AccentOn,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -254,10 +267,14 @@ private fun OverviewTab(
             }
         }
 
-        InfoCard(title = "Vehicle") {
-            KeyValue("Year / make / model", order.vehicleDisplay)
-            if (order.vehicleVin.isNotBlank()) KeyValue("VIN", order.vehicleVin)
-            if (order.licensePlate.isNotBlank()) KeyValue("Plate", order.licensePlate)
+        InfoCard(title = workDomain.orderSectionTitle) {
+            KeyValue(workDomain.primaryDescriptorLabel, order.displayName(workDomain))
+            if (order.vehicleVin.isNotBlank()) {
+                KeyValue(workDomain.primaryIdLabel, order.vehicleVin)
+            }
+            if (order.licensePlate.isNotBlank()) {
+                KeyValue(workDomain.secondaryIdLabel, order.licensePlate)
+            }
         }
 
         if (order.customerName.isNotBlank() || order.customerPhone.isNotBlank()) {
@@ -281,7 +298,7 @@ private fun OverviewTab(
         InfoCard(title = "Stats") {
             KeyValue("Status", order.status.label)
             KeyValue(
-                "Diagnostic sessions",
+                workDomain.sessionStatsLabel,
                 "$sessionCount ${if (sessionCount == 1) "session" else "sessions"}",
             )
             KeyValue(
@@ -336,6 +353,7 @@ private fun OverviewTab(
 @Composable
 private fun DiagnosisTab(
     order: RepairOrder,
+    workDomain: WorkDomain,
     sessions: List<Session>,
     onOpenSession: (String) -> Unit,
 ) {
@@ -343,14 +361,14 @@ private fun DiagnosisTab(
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "No diagnosis yet",
+                    text = "No sessions yet",
                     color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Start a diagnosis from Overview — steps land here.",
+                    text = "Start from Overview — steps and session notes land here.",
                     color = AppColors.TextSecondary,
                     fontSize = 13.sp,
                 )
@@ -365,7 +383,9 @@ private fun DiagnosisTab(
     ) {
         if (order.diagnoses.isNotEmpty()) {
             item {
-                SectionHeader("Diagnostic steps")
+                SectionHeader(
+                    if (workDomain == WorkDomain.GENERAL_PURPOSE) "Steps" else "Diagnostic steps",
+                )
             }
             items(order.diagnoses, key = { it.id }) { d ->
                 Column(
@@ -408,7 +428,7 @@ private fun DiagnosisTab(
         }
         if (sessions.isNotEmpty()) {
             item {
-                SectionHeader("Diagnostic sessions")
+                SectionHeader(workDomain.sessionStatsLabel)
             }
             items(sessions, key = { it.id }) { s ->
                 Column(
@@ -558,4 +578,3 @@ private fun SecondaryButton(
         )
     }
 }
-

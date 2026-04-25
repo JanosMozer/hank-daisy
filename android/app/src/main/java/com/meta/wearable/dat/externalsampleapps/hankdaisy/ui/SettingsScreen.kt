@@ -33,12 +33,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppSettings
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.TextScale
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.ThemeMode
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
+    onCaptureModeChange: (CaptureMode) -> Unit,
+    onWorkDomainChange: (WorkDomain) -> Unit,
+    onDemoCommentaryModeChange: (Boolean) -> Unit,
     onThemeChange: (ThemeMode) -> Unit,
     onTextScaleChange: (TextScale) -> Unit,
     onHighContrastChange: (Boolean) -> Unit,
@@ -62,6 +67,44 @@ fun SettingsScreen(
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(20.dp))
+
+        SettingsSection(title = "Assistant") {
+            ToggleRow(
+                label = "Use phone camera",
+                subtitle =
+                    "Off uses Ray-Ban Meta glasses through DAT. On uses the phone camera with the same Hank workflow.",
+                value = settings.captureMode == CaptureMode.PHONE_CAMERA,
+                onChange = {
+                    onCaptureModeChange(
+                        if (it) CaptureMode.PHONE_CAMERA else CaptureMode.GLASSES,
+                    )
+                },
+            )
+            Spacer(Modifier.height(14.dp))
+            SegmentedRow(
+                label = "Mode",
+                options = WorkDomain.values().map { it.segmentLabel },
+                selectedIndex = settings.workDomain.ordinal,
+                onSelect = { onWorkDomainChange(WorkDomain.values()[it]) },
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = settings.workDomain.modeDescription,
+                color = AppColors.TextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+            )
+            Spacer(Modifier.height(14.dp))
+            ToggleRow(
+                label = "Visual demo mode",
+                subtitle =
+                    "Turns off the mic loop. Hank narrates scene changes, likely next steps, and common issues or P-codes when relevant.",
+                value = settings.demoCommentaryMode,
+                onChange = onDemoCommentaryModeChange,
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
 
         SettingsSection(title = "Appearance") {
             SegmentedRow(

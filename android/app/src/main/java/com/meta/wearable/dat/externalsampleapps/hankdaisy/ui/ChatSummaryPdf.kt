@@ -16,6 +16,7 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.Session
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.ChatMessage
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GeminiService
@@ -39,14 +40,15 @@ object ChatSummaryPdf {
     suspend fun summariseAndShare(
         context: Context,
         session: Session,
+        workDomain: WorkDomain,
         gemini: GeminiService,
     ) {
         val prompt =
             "Summarise the following conversation between a user and Hank " +
-                "(an automotive diagnostic assistant) as a professional " +
-                "technician's report. Sections:\n" +
+                "(${workDomain.summaryAssistantDescriptor}) as a professional " +
+                "work report. Sections:\n" +
                 "1) Problem / topic (1-2 sentences)\n" +
-                "2) Observations and diagnosis\n" +
+                "2) Observations and findings\n" +
                 "3) Actions taken or recommended, in order\n" +
                 "4) Open follow-ups or next steps\n" +
                 "Keep it tight, factual, no filler. Plain text, no markdown."

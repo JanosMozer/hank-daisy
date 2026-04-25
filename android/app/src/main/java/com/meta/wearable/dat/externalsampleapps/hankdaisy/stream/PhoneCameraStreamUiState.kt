@@ -6,16 +6,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-// StreamUiState - Phone Camera Streaming UI State
-//
-// This data class manages UI state for phone-camera streaming operations.
-
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
 
 import android.graphics.Bitmap
 import com.meta.wearable.dat.camera.types.StreamSessionState
 
-data class StreamUiState(
+data class PhoneCameraStreamUiState(
     val streamSessionState: StreamSessionState = StreamSessionState.STOPPED,
     val videoFrame: Bitmap? = null,
     val videoFrameCount: Int = 0,
@@ -26,19 +22,8 @@ data class StreamUiState(
     val isListening: Boolean = false,
     val isWakeWordActive: Boolean = false,
     val isHankSpeaking: Boolean = false,
+    val isDemoCommentaryMode: Boolean = false,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
-    val audioRouteStatus: AudioRouteManager.AudioStatus = AudioRouteManager.AudioStatus.FULL,
     val chatMessages: List<ChatMessage> = emptyList(),
 )
-
-data class ChatMessage(
-    val role: Role,
-    val text: String,
-    val timestamp: Long = System.currentTimeMillis(),
-    /** Absolute path to a JPEG the user attached to this message (chat-only
-     *  mode). Null for voice/text-only turns and for Hank's replies. */
-    val imagePath: String? = null,
-) {
-    enum class Role { USER, ASSISTANT }
-}

@@ -26,31 +26,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Handles Hank's spoken replies and keeps track of the active Android audio
- * route. The no-glasses app defaults to the phone mic/speaker, while still
- * allowing normal Bluetooth audio devices when Android has routed media there.
+ * Handles Hank's spoken replies for the phone-camera path. Input stays on the
+ * phone mic because SpeechRecognizer ignores app-level routing; output follows
+ * the active media route so normal Bluetooth speakers/headsets still work.
  */
 class AudioRouteManager(private val context: Context) {
 
     enum class AudioStatus {
-        /** Both Bluetooth mic and speaker routes are available. */
         FULL,
-        /** Bluetooth speaker available; speech recognition stays on the phone mic. */
         SPEAKER_ONLY,
-        /** Bluetooth mic available; replies fall back to the phone speaker. */
         MIC_ONLY,
-        /** Neither — everything falls back to the phone. */
         NONE,
     }
 
     companion object {
         private const val TAG = "HankDaisy:AudioRoute"
-
-        /**
-         * Flip to false to bypass ElevenLabs and use Android TTS directly —
-         * useful if the key runs out of quota or you want to skip the per-
-         * sentence network round-trip.
-         */
         private const val USE_ELEVENLABS = true
     }
 
@@ -71,8 +61,6 @@ class AudioRouteManager(private val context: Context) {
             apiKey = BuildConfig.ELEVENLABS_API_KEY,
             onSpeakingChanged = { speaking -> _isSpeaking.value = speaking },
         )
-
-    private var scoActive = false
 
     private val deviceCallback =
         object : android.media.AudioDeviceCallback() {
@@ -142,7 +130,6 @@ class AudioRouteManager(private val context: Context) {
         refreshStatus()
     }
 
-    /** Cut off the current utterance immediately, on whichever TTS backend is active. */
     fun stopSpeaking() {
         try {
             elevenLabs.stop()
@@ -153,19 +140,7 @@ class AudioRouteManager(private val context: Context) {
         _isSpeaking.value = false
     }
 
-    /**
-     * Speak the reply through the active Bluetooth media route if connected,
-     * else through the phone. Tries ElevenLabs first; falls back to Android TTS
-     * if ElevenLabs isn't configured or its first sentence fails.
-     *
-     * Splits long text into sentence-sized chunks so stopSpeaking() can cut
-     * Hank off within ~one sentence rather than waiting for the whole reply.
-     */
     fun speak(text: String) {
-        // Hank now emits structured Markdown (step headers, callouts,
-        // tables). Narrating "hash hash step one colon" sounds terrible,
-        // so we flatten the Markdown down to readable prose first — the
-        // same replies still render as structured cards in the UI.
         val spoken = HankMarkdown.toSpokenText(text)
         val chunks = splitForTts(spoken.ifBlank { text })
         if (chunks.isEmpty()) return
@@ -215,9 +190,6 @@ class AudioRouteManager(private val context: Context) {
         }
     }
 
-    /** Split a reply on clause boundaries (sentence-ends AND commas/semicolons)
-     * so each chunk is short enough that stop() can cancel the remainder
-     * within ~one clause's audio buffer instead of one whole sentence. */
     private fun splitForTts(text: String): List<String> {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return emptyList()
@@ -225,14 +197,6 @@ class AudioRouteManager(private val context: Context) {
         return trimmed.split(regex).map { it.trim() }.filter { it.isNotEmpty() }
     }
 
-    /**
-     * Mic routing is intentionally a no-op here. SpeechRecognizer is implemented
-     * by Google in a separate process and does not honor app-level
-     * setCommunicationDevice(); switching audio mode to IN_COMMUNICATION also
-     * makes the recognizer go silent on most devices. Until the app replaces
-     * SpeechRecognizer with AudioRecord + an on-device wake-word library, we
-     * leave routing alone so the phone-mic path keeps working.
-     */
     fun prepareSpeechInput() {
         Log.d(TAG, "prepareSpeechInput() is a no-op (SpeechRecognizer ignores app routing)")
     }

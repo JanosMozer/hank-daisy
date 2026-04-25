@@ -27,6 +27,7 @@ import com.meta.wearable.dat.core.types.DeviceIdentifier
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,6 +123,15 @@ class WearablesViewModel(application: Application) : AndroidViewModel(applicatio
 
   fun navigateToStreaming(onRequestWearablesPermission: suspend (Permission) -> PermissionStatus) {
     viewModelScope.launch {
+      if (CaptureMode.current(getApplication()) == CaptureMode.PHONE_CAMERA) {
+        if (_uiState.value.canRegister) {
+          _uiState.update { it.copy(isStreaming = true) }
+        } else {
+          setRecentError("Allow camera, microphone, internet, and notification permissions")
+        }
+        return@launch
+      }
+
       val permission = Permission.CAMERA // Camera permission is required for streaming
       val result = Wearables.checkPermissionStatus(permission)
 

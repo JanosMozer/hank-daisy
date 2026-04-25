@@ -181,8 +181,17 @@ fun StreamScreen(
             modifier = Modifier.weight(1f),
         )
 
-        // Manual Ask Hank (skips wake word, goes straight to listening)
-        if (streamUiState.isListening) {
+        // Manual Ask Hank (skips wake word, goes straight to listening).
+        // In visual demo mode, the same slot becomes a manual "comment now"
+        // trigger because the always-on mic loop is intentionally disabled.
+        if (streamUiState.isDemoCommentaryMode) {
+          SwitchButton(
+              label = "Comment now",
+              onClick = { streamViewModel.requestDemoCommentary() },
+              enabled = !streamUiState.isAnalyzing && !streamUiState.isHankSpeaking,
+              modifier = Modifier.weight(1f),
+          )
+        } else if (streamUiState.isListening) {
           SwitchButton(
               label = "Cancel",
               onClick = { streamViewModel.cancelListening() },

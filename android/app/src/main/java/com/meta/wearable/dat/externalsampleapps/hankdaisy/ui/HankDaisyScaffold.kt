@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -50,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.SessionViewModel
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.ThemeMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GeminiService
@@ -71,9 +73,11 @@ fun HankDaisyScaffold(
   val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val sessionVm: SessionViewModel = viewModel()
   val sessionState by sessionVm.uiState.collectAsStateWithLifecycle()
-  val geminiService = remember { GeminiService() }
+  val appContext = LocalContext.current.applicationContext
+  val geminiService = remember(appContext) { GeminiService(appContext) }
   val scope = rememberCoroutineScope()
   val activity = LocalActivity.current as? ComponentActivity
+  val captureMode = sessionState.settings.captureMode
 
   LaunchedEffect(uiState.recentError) {
     uiState.recentError?.let { errorMessage ->
@@ -136,8 +140,13 @@ fun HankDaisyScaffold(
         when {
           !sessionState.splashShown ->
               SplashScreen(onFinished = { sessionVm.markSplashDone() })
-          uiState.isStreaming ->
+          uiState.isStreaming && captureMode == CaptureMode.GLASSES ->
               StreamScreen(
+                  wearablesViewModel = viewModel,
+                  onSessionEnd = { sessionVm.saveStreamSession(it) },
+              )
+          uiState.isStreaming && captureMode == CaptureMode.PHONE_CAMERA ->
+              PhoneCameraStreamScreen(
                   wearablesViewModel = viewModel,
                   onSessionEnd = { sessionVm.saveStreamSession(it) },
               )
@@ -146,8 +155,13 @@ fun HankDaisyScaffold(
                   onBack = { sessionVm.closeChatOnly() },
                   onSessionEnd = { sessionVm.saveStreamSession(it) },
               )
-          !uiState.isRegistered ->
-              HomeScreen(viewModel = viewModel)
+          !uiState.isRegistered &&
+              captureMode == CaptureMode.GLASSES &&
+              sessionState.currentTab != AppTab.SETTINGS ->
+              HomeScreen(
+                  viewModel = viewModel,
+                  onOpenSettings = { sessionVm.selectTab(AppTab.SETTINGS) },
+              )
           sessionState.profileOpen ->
               ProfileScreen(
                   profile = sessionState.userProfile,
@@ -157,6 +171,7 @@ fun HankDaisyScaffold(
               )
           sessionState.newOrderSheetOpen ->
               NewOrderScreen(
+                  workDomain = sessionState.settings.workDomain,
                   onCancel = { sessionVm.closeNewOrderSheet() },
                   onCreate = { order ->
                     sessionVm.createOrder(order)
@@ -175,6 +190,7 @@ fun HankDaisyScaffold(
               val ctx = activity?.applicationContext
               OrderDetailScreen(
                   order = order,
+                  workDomain = sessionState.settings.workDomain,
                   sessions = orderSessions,
                   onBack = { sessionVm.closeOrderDetail() },
                   onStartDiagnosis = {
@@ -201,6 +217,7 @@ fun HankDaisyScaffold(
                                 context = ctx,
                                 order = order,
                                 sessions = orderSessions,
+                                workDomain = sessionState.settings.workDomain,
                                 gemini = geminiService,
                             )
                           }
@@ -234,6 +251,7 @@ fun HankDaisyScaffold(
                             ChatSummaryPdf.summariseAndShare(
                                 context = ctx,
                                 session = session,
+                                workDomain = sessionState.settings.workDomain,
                                 gemini = geminiService,
                             )
                           }
@@ -322,6 +340,8 @@ private fun MainTabs(
         AppTab.CONVOS ->
             ConvosScreen(
                 onNewSession = onStartStream,
+                workDomain = state.settings.workDomain,
+                captureMode = state.settings.captureMode,
                 isStreaming = isStreamingNow,
             )
         AppTab.CHATS ->
@@ -336,6 +356,7 @@ private fun MainTabs(
         AppTab.ORDERS ->
             OrdersScreen(
                 orders = state.orders,
+                workDomain = state.settings.workDomain,
                 openSessionCount = { id -> state.sessions.count { it.orderId == id } },
                 onOpenOrder = { sessionVm.openOrder(it) },
                 onNewOrder = { sessionVm.openNewOrderSheet() },
@@ -343,6 +364,15 @@ private fun MainTabs(
         AppTab.SETTINGS ->
             SettingsScreen(
                 settings = state.settings,
+                onCaptureModeChange = {
+                  sessionVm.updateSettings(state.settings.copy(captureMode = it))
+                },
+                onWorkDomainChange = {
+                  sessionVm.updateSettings(state.settings.copy(workDomain = it))
+                },
+                onDemoCommentaryModeChange = {
+                  sessionVm.updateSettings(state.settings.copy(demoCommentaryMode = it))
+                },
                 onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
                 onTextScaleChange = {
                   sessionVm.updateSettings(state.settings.copy(textScale = it))
