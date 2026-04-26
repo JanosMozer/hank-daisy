@@ -54,6 +54,7 @@ class AudioRouteManager(private val context: Context) {
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+    private var activeUtteranceId = 0L
 
     private val elevenLabs =
         ElevenLabsTtsService(
@@ -133,19 +134,14 @@ class AudioRouteManager(private val context: Context) {
     }
 
     fun stopSpeaking() {
-        try {
-            elevenLabs.stop()
-        } catch (_: Exception) {}
-        try {
-            tts?.stop()
-        } catch (_: Exception) {}
-        _isSpeaking.value = false
+        stopAllSpeech()
     }
 
     fun speak(text: String) {
         val spoken = HankMarkdown.toSpokenText(text)
         val chunks = splitForTts(spoken.ifBlank { text })
         if (chunks.isEmpty()) return
+        val utteranceId = beginNewUtterance()
         val a2dp = findA2dpDevice()
         Log.d(
             TAG,
@@ -154,12 +150,18 @@ class AudioRouteManager(private val context: Context) {
         if (USE_ELEVENLABS && elevenLabs.isConfigured) {
             val accepted =
                 elevenLabs.speak(chunks, onAllFailed = {
-                    Log.w(TAG, "ElevenLabs produced no audio — falling back to Android TTS")
-                    speakWithAndroidTts(chunks, a2dp)
+                    if (isCurrentUtterance(utteranceId)) {
+                        Log.w(TAG, "ElevenLabs produced no audio — falling back to Android TTS")
+                        speakWithAndroidTts(chunks, a2dp)
+                    } else {
+                        Log.d(TAG, "Ignoring stale ElevenLabs fallback for utterance $utteranceId")
+                    }
                 })
             if (accepted) return
+            if (!isCurrentUtterance(utteranceId)) return
             Log.w(TAG, "ElevenLabs rejected speak — falling back to Android TTS immediately")
         }
+        if (!isCurrentUtterance(utteranceId)) return
         speakWithAndroidTts(chunks, a2dp)
     }
 
@@ -168,6 +170,12 @@ class AudioRouteManager(private val context: Context) {
             Log.w(TAG, "Android TTS not ready — dropping reply")
             return
         }
+        try {
+            elevenLabs.stop()
+        } catch (_: Exception) {}
+        try {
+            tts?.stop()
+        } catch (_: Exception) {}
         if (a2dp != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             tts?.setAudioAttributes(
                 AudioAttributes.Builder()
@@ -197,6 +205,26 @@ class AudioRouteManager(private val context: Context) {
         if (trimmed.isEmpty()) return emptyList()
         val regex = Regex("(?<=[.!?,;:])\\s+")
         return trimmed.split(regex).map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    private fun beginNewUtterance(): Long =
+        synchronized(this) {
+            activeUtteranceId += 1
+            stopAllSpeech()
+            activeUtteranceId
+        }
+
+    private fun isCurrentUtterance(utteranceId: Long): Boolean =
+        synchronized(this) { activeUtteranceId == utteranceId }
+
+    private fun stopAllSpeech() {
+        try {
+            elevenLabs.stop()
+        } catch (_: Exception) {}
+        try {
+            tts?.stop()
+        } catch (_: Exception) {}
+        _isSpeaking.value = false
     }
 
     fun prepareSpeechInput() {

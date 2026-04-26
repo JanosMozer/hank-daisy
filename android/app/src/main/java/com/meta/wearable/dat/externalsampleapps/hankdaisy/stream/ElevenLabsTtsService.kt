@@ -67,6 +67,8 @@ class ElevenLabsTtsService(
     private val queue = ArrayDeque<String>()
     private var consumerJob: Job? = null
     private var currentPlayer: MediaPlayer? = null
+    private var activeRunId = 0L
+    private var cancelledRunId = 0L
 
     val isConfigured: Boolean
         get() = apiKey.isNotBlank() && voiceId.isNotBlank()
@@ -91,6 +93,15 @@ class ElevenLabsTtsService(
     }
 
     fun stop() {
+        val cancelledRun =
+            synchronized(this) {
+                activeRunId.also { runId ->
+                    if (runId != 0L) cancelledRunId = runId
+                }
+            }
+        if (cancelledRun != 0L) {
+            Log.d(TAG, "Stopping run $cancelledRun")
+        }
         synchronized(queue) { queue.clear() }
         // Silence FIRST — MediaPlayer.stop() has a flush lag where buffered
         // audio keeps coming out for ~150-300ms. setVolume(0) is instant
@@ -119,6 +130,11 @@ class ElevenLabsTtsService(
     private fun startConsumer(onAllFailed: () -> Unit) {
         val existing = consumerJob
         if (existing != null && existing.isActive) return
+        val runId =
+            synchronized(this) {
+                activeRunId += 1
+                activeRunId
+            }
         onSpeakingChanged(true)
         consumerJob =
             scope.launch {
@@ -174,13 +190,22 @@ class ElevenLabsTtsService(
                     }
                 } finally {
                     onSpeakingChanged(false)
-                    if (!anyPlayed) {
+                    val shouldFallback =
+                        synchronized(this@ElevenLabsTtsService) {
+                            val cancelled = cancelledRunId == runId
+                            if (cancelled) cancelledRunId = 0L
+                            if (activeRunId == runId) activeRunId = 0L
+                            !cancelled
+                        }
+                    if (!anyPlayed && shouldFallback) {
                         Log.w(TAG, "Queue drained with nothing played — invoking fallback")
                         try {
                             onAllFailed()
                         } catch (e: Exception) {
                             Log.w(TAG, "onAllFailed callback threw", e)
                         }
+                    } else if (!anyPlayed) {
+                        Log.d(TAG, "Suppressing fallback for cancelled run $runId")
                     }
                 }
             }
