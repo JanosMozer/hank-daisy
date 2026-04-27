@@ -18,7 +18,7 @@
     <string name="live_stream" description="Live Stream">Live stream</string>
 
     <!-- Non Stream Screen -->
-    <string name="hank_daisy_icon_description" description="App icon description">Multipoint Inspection icon</string>
+    <string name="hank_daisy_icon_description" description="App icon description">Capture and Report icon</string>
     <string name="non_stream_screen_description" description="Non stream screen description">Tap Start capture to record live inspection evidence from your glasses or use the camera button for a still image.</string>
     <string name="non_stream_screen_title" description="Non stream screen title">Start Inspection Capture</string>
     <string name="waiting_for_active_device" description="Waiting for active device message">Waiting for an active device</string>
@@ -62,7 +62,7 @@
 
     <!-- Getting Started Sheet -->
     <string name="getting_started_title" description="Getting Started sheet title">Getting started</string>
-    <string name="getting_started_tip_permission" description="Tip about camera permission">First, Multipoint Inspection needs permission to use your glasses camera.</string>
+    <string name="getting_started_tip_permission" description="Tip about camera permission">First, Capture and Report needs permission to use your glasses camera.</string>
     <string name="getting_started_tip_led" description="Tip about capture LED">The capture LED lets others know when you\'re recording inspection evidence or going live.</string>
     <string name="getting_started_tip_photo" description="Tip about photo capture">Capture still proof by tapping the camera button during the inspection.</string>
     <string name="getting_started_continue" description="Continue button">Continue</string>

@@ -51,6 +51,7 @@ fun StatusPill(
     isListening: Boolean,
     isAnalyzing: Boolean,
     isSpeaking: Boolean,
+    readyLabel: String = "Hank's listening",
     modifier: Modifier = Modifier,
 ) {
     val status =
@@ -76,7 +77,7 @@ fun StatusPill(
                     Triple(
                         Color(0xFF065F46).copy(alpha = 0.85f),
                         Color(0xFF34D399),
-                        "Hank's listening",
+                        readyLabel,
                     )
                 Status.Capturing ->
                     Triple(

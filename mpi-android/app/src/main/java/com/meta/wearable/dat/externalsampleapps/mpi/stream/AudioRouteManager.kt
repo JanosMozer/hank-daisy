@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class GlassesAudioManager(private val context: Context) {
+class AudioRouteManager(private val context: Context) {
 
     enum class AudioStatus {
         FULL,
@@ -28,7 +28,7 @@ class GlassesAudioManager(private val context: Context) {
     }
 
     companion object {
-        private const val TAG = "HankDaisy:GlassesAudio"
+        private const val TAG = "HankDaisy:AudioRoute"
         private const val USE_ELEVENLABS = true
     }
 
@@ -36,8 +36,8 @@ class GlassesAudioManager(private val context: Context) {
     private var ttsReady = false
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    private val _glassesAudioStatus = MutableStateFlow(AudioStatus.NONE)
-    val glassesAudioStatus: StateFlow<AudioStatus> = _glassesAudioStatus.asStateFlow()
+    private val _audioRouteStatus = MutableStateFlow(AudioStatus.NONE)
+    val audioRouteStatus: StateFlow<AudioStatus> = _audioRouteStatus.asStateFlow()
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -210,11 +210,11 @@ class GlassesAudioManager(private val context: Context) {
         _isSpeaking.value = false
     }
 
-    fun enableGlassesMic() {
-        Log.d(TAG, "enableGlassesMic() is a no-op (SpeechRecognizer ignores app routing)")
+    fun prepareSpeechInput() {
+        Log.d(TAG, "prepareSpeechInput() is a no-op (SpeechRecognizer ignores app routing)")
     }
 
-    fun disableGlassesMic() {}
+    fun releaseSpeechInput() {}
 
     private fun findA2dpDevice(): AudioDeviceInfo? {
         val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
@@ -239,14 +239,14 @@ class GlassesAudioManager(private val context: Context) {
     private fun refreshStatus() {
         val mic = findScoDevice() != null
         val speaker = findA2dpDevice() != null
-        _glassesAudioStatus.value =
+        _audioRouteStatus.value =
             when {
                 mic && speaker -> AudioStatus.FULL
                 speaker -> AudioStatus.SPEAKER_ONLY
                 mic -> AudioStatus.MIC_ONLY
                 else -> AudioStatus.NONE
             }
-        Log.d(TAG, "Glasses audio status: ${_glassesAudioStatus.value}")
+        Log.d(TAG, "Audio route status: ${_audioRouteStatus.value}")
     }
 
     fun shutdown() {

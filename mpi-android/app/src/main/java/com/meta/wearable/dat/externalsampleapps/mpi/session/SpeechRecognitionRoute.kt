@@ -9,7 +9,6 @@
 package com.meta.wearable.dat.externalsampleapps.mpi.session
 
 import android.content.Context
-import org.json.JSONObject
 
 enum class SpeechRecognitionRoute(
     val segmentLabel: String,
@@ -31,26 +30,10 @@ enum class SpeechRecognitionRoute(
     ;
 
     companion object {
-        private const val PREFS = "hank_sessions_v1"
-        private const val KEY_SETTINGS = "settings_json"
         internal const val KEY_SPEECH_RECOGNITION_ROUTE = "speechRecognitionRoute"
 
-        fun current(context: Context): SpeechRecognitionRoute {
-            val raw =
-                context.applicationContext
-                    .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getString(KEY_SETTINGS, null)
-            return fromSettingsJson(raw)
-        }
-
-        fun fromSettingsJson(raw: String?): SpeechRecognitionRoute {
-            if (raw.isNullOrBlank()) return ANDROID
-            return try {
-                fromStored(JSONObject(raw).optString(KEY_SPEECH_RECOGNITION_ROUTE, ANDROID.name))
-            } catch (_: Exception) {
-                ANDROID
-            }
-        }
+        fun current(context: Context): SpeechRecognitionRoute =
+            AppConfigStore.current(context).speech.recognitionRoute
 
         fun fromStored(raw: String?): SpeechRecognitionRoute =
             entries.firstOrNull { it.name == raw } ?: ANDROID

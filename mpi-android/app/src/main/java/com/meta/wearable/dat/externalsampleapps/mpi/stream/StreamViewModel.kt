@@ -34,7 +34,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.meta.wearable.dat.externalsampleapps.mpi.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.mpi.session.AppConfigStore
+import com.meta.wearable.dat.externalsampleapps.mpi.session.DomainMode
 import com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind
+import com.meta.wearable.dat.externalsampleapps.mpi.session.HankMode
 import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.camera.Stream
 import com.meta.wearable.dat.camera.addStream
@@ -54,6 +57,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -99,7 +103,7 @@ class StreamViewModel(
   private var sessionStateJob: Job? = null
   private var stream: Stream? = null
   private val liveStreamServer = LiveStreamServer(8080)
-  private val geminiService = GeminiService()
+  private val geminiService = GeminiService(application)
   private val glassesAudio = GlassesAudioManager(application)
   private val voiceCommand = VoiceCommandManager(application)
   private var voiceJob: Job? = null
@@ -109,6 +113,7 @@ class StreamViewModel(
   private var analyzeJob: Job? = null
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
+  private var readOnlyJob: Job? = null
   private var audioEvidenceRecorder: MediaRecorder? = null
   private var audioEvidenceFile: File? = null
   private var audioEvidenceStartedAt: Long = 0L
@@ -117,12 +122,19 @@ class StreamViewModel(
   private var lastClipFrameAt = 0L
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
+  private val pendingReadOnlyNotes = mutableListOf<String>()
   @Volatile private var lastTurnAt: Long = 0L
 
   private val sceneWatcher =
       SceneChangeWatcher(
           onSettledAfterMotion = {
-            viewModelScope.launch { autonomousObservation() }
+            viewModelScope.launch {
+              if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+                performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.SCENE_CHANGE)
+              } else {
+                autonomousObservation()
+              }
+            }
           },
       )
 
@@ -145,19 +157,7 @@ class StreamViewModel(
   private fun hapticInterruptCue() {
     try {
       val app = getApplication<Application>()
-      // Read the user's haptic-feedback preference from the same shared
-      // prefs SessionViewModel persists settings into. Default ON for
-      // backwards compatibility.
-      val hapticEnabled =
-          try {
-            val raw =
-                app.getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
-                    .getString("settings_json", null)
-            if (raw == null) true
-            else org.json.JSONObject(raw).optBoolean("hapticFeedback", true)
-          } catch (_: Exception) {
-            true
-          }
+      val hapticEnabled = AppConfigStore.current(app).general.hapticFeedback
       if (!hapticEnabled) return
       val vibrator =
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -220,6 +220,7 @@ class StreamViewModel(
         )
     presentationQueue = queue
     queue.start()
+    _uiState.update { it.copy(hankMode = AppConfigStore.current(getApplication()).capture.hankMode) }
     if (session == null) {
       try {
         Wearables.createSession(deviceSelector)
@@ -254,6 +255,13 @@ class StreamViewModel(
     observeTtsSpeaking()
     startWakeWordListening()
     startSceneWatcher()
+    if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+      scheduleReadOnlyLoop()
+      viewModelScope.launch {
+        delay(1_000L)
+        performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
+      }
+    }
     startStreamInternal()
   }
 
@@ -297,21 +305,6 @@ class StreamViewModel(
     if (conversationHistory.isEmpty()) return  // only auto-comment mid-convo
     if (System.currentTimeMillis() - lastTurnAt < 4_000L) return
 
-    val prompt =
-        "(System note: the camera moved; here's the new view.) React ONLY if " +
-            "it's directly relevant to the conversation so far. " +
-            "1) If the current conversation is NOT about something automotive or " +
-            "what's visible, or the new view is unrelated (a wall, a person, a " +
-            "room, background) — reply with just: <quiet>. Do not describe the " +
-            "scene unprompted. " +
-            "2) If the user has VISIBLY completed the step you just gave them, " +
-            "give the NEXT single step now (one sentence, then stop). " +
-            "3) If they repositioned where you asked but the step isn't done " +
-            "yet, say one short sentence to acknowledge or guide them. " +
-            "4) If something genuinely concerning is visible (new problem, " +
-            "danger), say one short sentence about it. " +
-            "5) Otherwise — reply with just: <quiet>."
-
     autonomousJob?.cancel()
     autonomousJob =
         viewModelScope.launch {
@@ -326,8 +319,13 @@ class StreamViewModel(
               }
           try {
             val response =
-                geminiService.analyzeFrame(frameCopy, prompt, conversationHistory.toList())
-            val cleaned = response.trim().lowercase()
+                geminiService.analyzeFrame(
+                    bitmap = frameCopy,
+                    userQuestion = HankPromptFactory.autonomousObservationPrompt(currentDomainMode()),
+                    history = conversationHistory.toList(),
+                    systemPromptOverride = HankPromptFactory.systemPrompt(currentDomainMode()),
+                )
+            val cleaned = response.trim().lowercase(Locale.US)
             _uiState.update { it.copy(isAnalyzing = false) }
             if (cleaned.contains("<quiet>") ||
                 cleaned == "quiet" ||
@@ -335,15 +333,7 @@ class StreamViewModel(
               Log.d(TAG, "Autonomous observation: Hank chose to stay quiet")
               return@launch
             }
-            // Append to conversation so subsequent user turns see this comment.
-            conversationHistory.add(GeminiService.Turn("assistant", response))
-            while (conversationHistory.size > 24) {
-              conversationHistory.removeAt(0)
-            }
-            appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
-            _uiState.update { it.copy(lastGeminiResponse = response) }
-            glassesAudio.speak(response)
-            lastTurnAt = System.currentTimeMillis()
+            appendAssistantResponse(response)
           } catch (e: Exception) {
             Log.e(TAG, "autonomousObservation failed", e)
             _uiState.update { it.copy(isAnalyzing = false) }
@@ -384,10 +374,9 @@ class StreamViewModel(
               }
             } else {
               bargeInDetector.stop()
-              // Always resume listening the moment TTS ends — no branching on
-              // "is this mid-conversation". Steady = always ready for the
-              // user's next word.
-              voiceCommand.startConversationFollowUp()
+              if (_uiState.value.hankMode == HankMode.INTERACTIVE) {
+                voiceCommand.startConversationFollowUp()
+              }
             }
           }
         }
@@ -524,8 +513,11 @@ class StreamViewModel(
     sceneJob = null
     try { autonomousJob?.cancel() } catch (_: Exception) {}
     autonomousJob = null
+    try { readOnlyJob?.cancel() } catch (_: Exception) {}
+    readOnlyJob = null
     sceneWatcher.reset()
     conversationHistory.clear()
+    pendingReadOnlyNotes.clear()
     lastTurnAt = 0L
     try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
     try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
@@ -603,7 +595,11 @@ class StreamViewModel(
           }
           is VoiceCommandManager.VoiceState.QuestionReady -> {
             _uiState.update { it.copy(isListening = false, spokenQuestion = voiceState.text) }
-            analyzeWithQuestion(voiceState.text)
+            if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+              handleReadOnlyTranscript(voiceState.text)
+            } else {
+              analyzeWithQuestion(voiceState.text)
+            }
           }
           is VoiceCommandManager.VoiceState.Error -> {
             Log.w(TAG, "Voice error: ${voiceState.message}")
@@ -623,6 +619,25 @@ class StreamViewModel(
     if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
     _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
     voiceCommand.startManualListen()
+  }
+
+  fun requestCommentNow() {
+    viewModelScope.launch {
+      performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
+    }
+  }
+
+  fun setHankMode(mode: HankMode) {
+    _uiState.update { it.copy(hankMode = mode) }
+    if (mode == HankMode.READ_ONLY) {
+      scheduleReadOnlyLoop()
+      viewModelScope.launch {
+        performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
+      }
+    } else {
+      readOnlyJob?.cancel()
+      readOnlyJob = null
+    }
   }
 
   /** Append messages to the chat panel UI state, capped at 100 to stay light.
@@ -888,22 +903,19 @@ class StreamViewModel(
           val frameCopy =
               currentFrame?.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
           val historySnapshot = conversationHistory.toList()
-          val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
+          val response =
+              geminiService.analyzeFrame(
+                  bitmap = frameCopy,
+                  userQuestion = question,
+                  history = historySnapshot,
+                  systemPromptOverride = HankPromptFactory.systemPrompt(currentDomainMode()),
+              )
           frameCopy?.recycle()
 
           conversationHistory.add(GeminiService.Turn("user", question))
-          conversationHistory.add(GeminiService.Turn("assistant", response))
-          while (conversationHistory.size > 24) {
-            conversationHistory.removeAt(0)
-          }
-          appendChatMessages(
-              ChatMessage(ChatMessage.Role.USER, question),
-              ChatMessage(ChatMessage.Role.ASSISTANT, response),
-          )
-
+          appendChatMessages(ChatMessage(ChatMessage.Role.USER, question))
+          appendAssistantResponse(response)
           _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
-          glassesAudio.speak(response)
-          lastTurnAt = System.currentTimeMillis()
         }
   }
 
@@ -912,6 +924,125 @@ class StreamViewModel(
     voiceJob?.cancel()
     _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
   }
+
+  private fun scheduleReadOnlyLoop() {
+    readOnlyJob?.cancel()
+    readOnlyJob =
+        viewModelScope.launch {
+          while (isActive && _uiState.value.hankMode == HankMode.READ_ONLY) {
+            delay(currentReadOnlyPauseMs())
+            if (_uiState.value.hankMode != HankMode.READ_ONLY) continue
+            performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.FOLLOW_UP)
+          }
+        }
+  }
+
+  private suspend fun performReadOnlyCommentary(trigger: HankPromptFactory.CommentaryTrigger) {
+    val frame = _uiState.value.videoFrame ?: return
+    if (frame.isRecycled) return
+    if (_uiState.value.hankMode != HankMode.READ_ONLY) return
+    if (_uiState.value.isAnalyzing || _uiState.value.isListening || _uiState.value.isHankSpeaking) return
+    if (System.currentTimeMillis() - lastTurnAt < currentReadOnlyPauseMs() / 2) return
+
+    val noteContext = pendingReadOnlyNotes.joinToString(". ").trim().ifBlank { null }
+    _uiState.update { it.copy(isAnalyzing = true) }
+    val frameCopy = frame.copy(frame.config ?: Bitmap.Config.ARGB_8888, true)
+    try {
+      val response =
+          geminiService.analyzeFrame(
+              bitmap = frameCopy,
+              userQuestion =
+                  HankPromptFactory.readOnlyUserPrompt(
+                      currentDomainMode(),
+                      trigger,
+                      noteContext,
+                  ),
+              history = conversationHistory.toList(),
+              systemPromptOverride = HankPromptFactory.readOnlySystemPrompt(currentDomainMode()),
+          )
+      if (response.isBlank()) return
+      appendAssistantResponse(response)
+      pendingReadOnlyNotes.clear()
+      _uiState.update { it.copy(pendingReadOnlyContext = null) }
+    } finally {
+      frameCopy.recycle()
+      _uiState.update { it.copy(isAnalyzing = false) }
+    }
+  }
+
+  private fun handleReadOnlyTranscript(text: String) {
+    if (!isRelevantReadOnlyTranscript(text)) {
+      voiceCommand.onQuestionHandled()
+      return
+    }
+    pendingReadOnlyNotes.add(text)
+    if (pendingReadOnlyNotes.size > 4) {
+      pendingReadOnlyNotes.removeFirst()
+    }
+    _uiState.update {
+      it.copy(
+          pendingReadOnlyContext = pendingReadOnlyNotes.joinToString(" • "),
+          spokenQuestion = text,
+      )
+    }
+    voiceCommand.onQuestionHandled()
+    viewModelScope.launch {
+      delay(250L)
+      performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.TRANSCRIPT_UPDATE)
+    }
+  }
+
+  private fun isRelevantReadOnlyTranscript(text: String): Boolean {
+    val normalized = text.trim().lowercase(Locale.US)
+    if (normalized.length < 8) return false
+    val fillers = listOf("okay", "thanks", "thank you", "go ahead", "continue", "hey hank", "hank")
+    if (fillers.any { normalized == it }) return false
+    val keywords =
+        listOf(
+            "leak",
+            "noise",
+            "crack",
+            "code",
+            "battery",
+            "brake",
+            "chain",
+            "wheel",
+            "coolant",
+            "sensor",
+            "connector",
+            "wire",
+            "bike",
+            "bicycle",
+            "engine",
+            "device",
+            "screen",
+            "power",
+            "smell",
+            "hot",
+        )
+    return keywords.any { normalized.contains(it) } ||
+        normalized.any { it.isDigit() } ||
+        normalized.split(Regex("\\s+")).size >= 4
+  }
+
+  private fun appendAssistantResponse(response: String) {
+    val cleaned = response.trim()
+    if (cleaned.isBlank() || cleaned.equals("<quiet>", ignoreCase = true)) return
+    conversationHistory.add(GeminiService.Turn("assistant", cleaned))
+    while (conversationHistory.size > 24) {
+      conversationHistory.removeAt(0)
+    }
+    appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, cleaned))
+    _uiState.update { it.copy(lastGeminiResponse = cleaned) }
+    glassesAudio.speak(cleaned)
+    lastTurnAt = System.currentTimeMillis()
+  }
+
+  private fun currentReadOnlyPauseMs(): Long =
+      AppConfigStore.current(getApplication()).speech.readOnlyPauseMs
+
+  private fun currentDomainMode(): DomainMode =
+      AppConfigStore.current(getApplication()).general.domainMode
 
 
   /**

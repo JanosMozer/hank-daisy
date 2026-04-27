@@ -20,7 +20,7 @@
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="Multipoint Inspection"
+        android:label="Capture &amp; Report"
         android:supportsRtl="true"
         android:theme="@style/Theme.HankDaisy">
 

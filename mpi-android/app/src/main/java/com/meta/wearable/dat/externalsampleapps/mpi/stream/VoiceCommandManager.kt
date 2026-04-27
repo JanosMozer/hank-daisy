@@ -11,8 +11,10 @@ package com.meta.wearable.dat.externalsampleapps.mpi.stream
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioManager
 import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
@@ -21,6 +23,9 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
+import com.meta.wearable.dat.externalsampleapps.mpi.session.AppConfigStore
+import com.meta.wearable.dat.externalsampleapps.mpi.session.CaptureAudioSource
+import com.meta.wearable.dat.externalsampleapps.mpi.session.PreferredMicDevice
 import com.meta.wearable.dat.externalsampleapps.mpi.session.SpeechRecognitionRoute
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -513,7 +518,7 @@ class VoiceCommandManager(private val context: Context) {
         recognizer = null
     }
 
-    private fun currentRoute(): SpeechRecognitionRoute = SpeechRecognitionRoute.current(context)
+    private fun currentRoute(): SpeechRecognitionRoute = AppConfigStore.current(context).speech.recognitionRoute
 
     private fun destroyOpenRouterRecognizer() {
         audioCaptureActive = false
@@ -556,6 +561,7 @@ class VoiceCommandManager(private val context: Context) {
         }
 
         audioRecord = recorder
+        applyPreferredInputDevice(recorder)
         val buffer = ShortArray(1024)
         val maxPrerollBytes = (AUDIO_SAMPLE_RATE * 2 * AUDIO_PREROLL_MS) / 1000
         val preroll = ArrayDeque<ByteArray>()
@@ -700,4 +706,42 @@ class VoiceCommandManager(private val context: Context) {
 
     private fun currentLatencyMs(): Long? =
         recognitionCycleStartedAt.takeIf { it > 0L }?.let { System.currentTimeMillis() - it }
+
+    private fun applyPreferredInputDevice(recorder: AudioRecord) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val config = AppConfigStore.current(context)
+        val preference =
+            when (config.capture.audioSource) {
+                CaptureAudioSource.GLASSES_MIC -> PreferredMicDevice.BLUETOOTH_MIC
+                CaptureAudioSource.PHONE_MIC -> config.capture.preferredPhoneMic
+            }
+        if (preference == PreferredMicDevice.SYSTEM_DEFAULT) return
+
+        val matchingDevice =
+            audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
+                when (preference) {
+                    PreferredMicDevice.SYSTEM_DEFAULT -> true
+                    PreferredMicDevice.BUILT_IN_MIC ->
+                        device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC
+                    PreferredMicDevice.WIRED_HEADSET ->
+                        device.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                            device.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                    PreferredMicDevice.USB_MIC ->
+                        device.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                            device.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                    PreferredMicDevice.BLUETOOTH_MIC ->
+                        device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                            (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                                device.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+                }
+            }
+
+        if (matchingDevice != null) {
+            try {
+                recorder.preferredDevice = matchingDevice
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to apply preferred mic device ${matchingDevice.productName}", e)
+            }
+        }
+    }
 }

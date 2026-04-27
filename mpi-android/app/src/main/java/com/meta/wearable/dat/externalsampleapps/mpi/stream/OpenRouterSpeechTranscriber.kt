@@ -60,6 +60,7 @@ class OpenRouterSpeechTranscriber {
             Ignore background music, radio, TV, shop noise, tool noise, and side conversations.
             If multiple people speak, keep only the dominant foreground speaker.
             If there is no clear foreground utterance for the assistant, return exactly <no-speech>.
+            Return only the spoken words. Never mention audio, transcript, transcription, speaker, recording, file, or clip.
             Return plain text only. No labels, no commentary, no quotes.
             """
     }
@@ -195,7 +196,7 @@ class OpenRouterSpeechTranscriber {
                     message = "HTTP ${response.code}",
                 )
             }
-            val text = extractText(body)?.trim().orEmpty()
+            val text = normalizeTranscript(extractText(body).orEmpty())
             return when {
                 text.isBlank() ||
                     text.equals("<no-speech>", ignoreCase = true) ||
@@ -246,5 +247,54 @@ class OpenRouterSpeechTranscriber {
             }
             else -> null
         }
+    }
+
+    private fun normalizeTranscript(raw: String): String {
+        var text = raw.trim()
+        if (text.isEmpty()) return text
+
+        text =
+            text.removePrefix("\"")
+                .removeSuffix("\"")
+                .removePrefix("'")
+                .removeSuffix("'")
+                .trim()
+
+        val labelPatterns =
+            listOf(
+                Regex("^transcript\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^transcription\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^audio\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^recording\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^speaker\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^primary speaker\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^foreground speaker\\s*:\\s*", RegexOption.IGNORE_CASE),
+                Regex("^user\\s*:\\s*", RegexOption.IGNORE_CASE),
+            )
+        labelPatterns.forEach { pattern ->
+            text = pattern.replace(text, "").trim()
+        }
+
+        val metaPrefixes =
+            listOf(
+                Regex("^the audio (file |clip )?(says|is)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                Regex("^the recording (says|is)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                Regex("^the transcription (says|is)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                Regex("^the transcript (says|is)\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                Regex("^the (primary|foreground) speaker says\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                Regex("^i hear\\s*:?\\s*", RegexOption.IGNORE_CASE),
+                Regex("^i heard\\s*:?\\s*", RegexOption.IGNORE_CASE),
+            )
+        metaPrefixes.forEach { pattern ->
+            text = pattern.replace(text, "").trim()
+        }
+
+        val quoted =
+            Regex("[\"“](.+?)[\"”]").find(text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+        if (quoted.isNotBlank()) {
+            text = quoted
+        }
+
+        return text.trim().trim(',', '.', ';', ':', '-', ' ').trim()
     }
 }

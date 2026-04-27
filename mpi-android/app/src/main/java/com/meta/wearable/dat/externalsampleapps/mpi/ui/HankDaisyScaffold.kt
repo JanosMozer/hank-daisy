@@ -1,11 +1,3 @@
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- * All rights reserved.
- *
- * This source code is licensed under the license found in the
- * LICENSE file in the root directory of this source tree.
- */
-
 package com.meta.wearable.dat.externalsampleapps.mpi.ui
 
 import androidx.activity.ComponentActivity
@@ -13,51 +5,35 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.externalsampleapps.mpi.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.mpi.session.CaptureVideoSource
 import com.meta.wearable.dat.externalsampleapps.mpi.session.SessionViewModel
 import com.meta.wearable.dat.externalsampleapps.mpi.session.ThemeMode
-import com.meta.wearable.dat.externalsampleapps.mpi.stream.GeminiService
 import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
-import kotlinx.coroutines.launch
-
-private fun initialsOf(name: String): String =
-    name.trim().split(" ").take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }.joinToString("")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,297 +42,138 @@ fun HankDaisyScaffold(
     onRequestWearablesPermission: suspend (Permission) -> PermissionStatus,
     modifier: Modifier = Modifier,
 ) {
-  val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-  val snackbarHostState = remember { SnackbarHostState() }
-  val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-  val sessionVm: SessionViewModel = viewModel()
-  val sessionState by sessionVm.uiState.collectAsStateWithLifecycle()
-  val geminiService = remember { GeminiService() }
-  val scope = rememberCoroutineScope()
-  val activity = LocalActivity.current as? ComponentActivity
+    val wearablesState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sessionVm: SessionViewModel = viewModel()
+    val sessionState by sessionVm.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val activity = LocalActivity.current as? ComponentActivity
 
-  LaunchedEffect(uiState.recentError) {
-    uiState.recentError?.let { errorMessage ->
-      snackbarHostState.showSnackbar(errorMessage)
-      viewModel.clearRecentError()
+    LaunchedEffect(wearablesState.recentError) {
+        wearablesState.recentError?.let { errorMessage ->
+            snackbarHostState.showSnackbar(errorMessage)
+            viewModel.clearRecentError()
+        }
     }
-  }
 
-  // Fallback listener for any code path that still sets streamRequested —
-  // kept for safety even though the + button now calls navigateToStreaming
-  // directly.
-  LaunchedEffect(sessionState.streamRequested) {
-    if (sessionState.streamRequested && !uiState.isStreaming) {
-      viewModel.navigateToStreaming(onRequestWearablesPermission)
-      sessionVm.clearStreamRequest()
-    }
-  }
-
-  // Direct lambda the Convos "+" button fires — avoids the streamRequested
-  // indirection so the stream start is unconditional.
-  val startGlassesStream: () -> Unit = {
-    viewModel.navigateToStreaming(onRequestWearablesPermission)
-  }
-
-  val systemDark = isSystemInDarkTheme()
-  val basePalette =
-      when (sessionState.settings.themeMode) {
-        ThemeMode.DARK -> DarkPalette
-        ThemeMode.LIGHT -> LightPalette
-        ThemeMode.SYSTEM -> if (systemDark) DarkPalette else LightPalette
-      }
-  // High-contrast tweaks: collapse the secondary/muted greys toward the
-  // primary text colour and darken the border so dividers + caption text
-  // stand out for users who need the extra contrast.
-  val palette =
-      if (sessionState.settings.highContrast) {
-        basePalette.copy(
-            TextSecondary = basePalette.TextPrimary,
-            TextMuted = basePalette.TextPrimary.copy(alpha = 0.75f),
-            Border = basePalette.TextPrimary.copy(alpha = 0.45f),
-        )
-      } else {
-        basePalette
-      }
-  // Text-scale: rebuild Density with a multiplied fontScale so EVERY .sp
-  // text in the tree resizes uniformly without touching individual screens.
-  val baseDensity = LocalDensity.current
-  val scaledDensity =
-      Density(
-          density = baseDensity.density,
-          fontScale = baseDensity.fontScale * sessionState.settings.textScale.factor,
-      )
-
-  CompositionLocalProvider(
-      LocalAppPalette provides palette,
-      LocalDensity provides scaledDensity,
-  ) {
-    Surface(modifier = modifier.fillMaxSize(), color = AppColors.Background) {
-      Box(modifier = Modifier.fillMaxSize()) {
-        when {
-          !sessionState.splashShown ->
-              SplashScreen(onFinished = { sessionVm.markSplashDone() })
-          uiState.isStreaming ->
-              StreamScreen(
-                  wearablesViewModel = viewModel,
-                  onSessionEnd = { messages, evidence ->
-                    sessionVm.saveStreamSession(messages, evidence)
-                  },
-              )
-          sessionState.chatOnlyOpen ->
-              ChatOnlyScreen(
-                  onBack = { sessionVm.closeChatOnly() },
-                  onSessionEnd = { sessionVm.saveStreamSession(it) },
-              )
-          !uiState.isRegistered ->
-              HomeScreen(viewModel = viewModel)
-          sessionState.profileOpen ->
-              ProfileScreen(
-                  profile = sessionState.userProfile,
-                  sessionCount = sessionState.sessions.size,
-                  onBack = { sessionVm.closeProfile() },
-                  onSave = { sessionVm.updateProfile(it) },
-              )
-          sessionState.newOrderSheetOpen ->
-              NewOrderScreen(
-                  onCancel = { sessionVm.closeNewOrderSheet() },
-                  onCreate = { order ->
-                    sessionVm.createOrder(order)
-                    sessionVm.closeNewOrderSheet()
-                    // Jump straight into the detail view — feels more
-                    // direct than bouncing back to the list after create.
-                    sessionVm.openOrder(order.id)
-                  },
-              )
-          sessionState.viewingOrderId != null -> {
-            val order =
-                sessionState.orders.firstOrNull { it.id == sessionState.viewingOrderId }
-            if (order != null) {
-              val orderSessions =
-                  sessionState.sessions.filter { it.orderId == order.id }
-              val ctx = activity?.applicationContext
-              OrderDetailScreen(
-                  order = order,
-                  sessions = orderSessions,
-                  onBack = { sessionVm.closeOrderDetail() },
-                  onStartDiagnosis = { findingId ->
-                    sessionVm.setActiveCaptureTarget(order.id, findingId)
-                    viewModel.navigateToStreaming(onRequestWearablesPermission)
-                  },
-                  onOpenSession = { sessionVm.openSession(it) },
-                  onUpdateOrder = { sessionVm.updateOrder(it) },
-                  onCloseOrder = { sessionVm.closeOrder(order.id) },
-                  onReopenOrder = { sessionVm.reopenOrder(order.id) },
-                  onDeleteOrder = {
-                    sessionVm.deleteOrder(order.id)
-                    sessionVm.closeOrderDetail()
-                  },
-                  onGenerateReport =
-                      if (ctx != null) {
-                        {
-                          scope.launch {
-                            InspectionReportHtml.generateAndShare(
-                                context = ctx,
-                                order = order,
-                                sessions = orderSessions,
-                                gemini = geminiService,
-                            )
-                          }
-                        }
-                      } else null,
-              )
-            } else {
-              // Order deleted from under us — bail back to the tabs.
-              sessionVm.closeOrderDetail()
-              MainTabs(
-                  sessionVm = sessionVm,
-                  onOpenProfile = { sessionVm.openProfile() },
-                  onStartStream = startGlassesStream,
-                  isStreamingNow = uiState.isStreaming,
-              )
-            }
-          }
-          sessionState.viewingSessionId != null -> {
-            val session =
-                sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
-            if (session != null) {
-              val ctx = activity?.applicationContext
-              ChatHistoryScreen(
-                  title = session.title,
-                  messages = session.messages,
-                  onBack = { sessionVm.closeSession() },
-                  onSummariseAndExport =
-                      if (ctx != null) {
-                        {
-                          scope.launch {
-                            ChatSummaryPdf.summariseAndShare(
-                                context = ctx,
-                                session = session,
-                                gemini = geminiService,
-                            )
-                          }
-                        }
-                      } else null,
-              )
-            } else {
-              sessionVm.closeSession()
-              MainTabs(
-                  sessionVm = sessionVm,
-                  onOpenProfile = { sessionVm.openProfile() },
-                  onStartStream = startGlassesStream,
-                  isStreamingNow = uiState.isStreaming,
-              )
-            }
-          }
-          else ->
-              MainTabs(
-                  sessionVm = sessionVm,
-                  onOpenProfile = { sessionVm.openProfile() },
-                  onStartStream = startGlassesStream,
-                  isStreamingNow = uiState.isStreaming,
-              )
+    val systemDark = isSystemInDarkTheme()
+    val basePalette =
+        when (sessionState.config.general.themeMode) {
+            ThemeMode.LIGHT -> LightPalette
+            ThemeMode.DARK -> DarkPalette
+            ThemeMode.SYSTEM -> if (systemDark) DarkPalette else LightPalette
+        }
+    val palette =
+        if (sessionState.config.general.highContrast) {
+            basePalette.copy(
+                SurfaceAlt = basePalette.Surface,
+                Border = basePalette.Accent,
+                TextSecondary = basePalette.TextPrimary,
+                TextMuted = basePalette.TextPrimary,
+            )
+        } else {
+            basePalette
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier =
-                Modifier.align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 32.dp),
-            snackbar = { data ->
-              Snackbar(
-                  shape = RoundedCornerShape(24.dp),
-                  containerColor = MaterialTheme.colorScheme.errorContainer,
-                  contentColor = MaterialTheme.colorScheme.onErrorContainer,
-              ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(
-                      imageVector = Icons.Default.Error,
-                      contentDescription = "HankDaisy error",
-                      tint = MaterialTheme.colorScheme.error,
-                  )
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text(data.visuals.message)
+    val baseDensity = LocalDensity.current
+    val scaledDensity =
+        Density(
+            density = baseDensity.density,
+            fontScale = baseDensity.fontScale * sessionState.config.general.textScale.factor,
+        )
+
+    CompositionLocalProvider(
+        LocalAppPalette provides palette,
+        LocalDensity provides scaledDensity,
+    ) {
+        Surface(modifier = modifier.fillMaxSize(), color = AppColors.Background) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    wearablesState.isStreaming &&
+                        sessionState.config.capture.videoSource == CaptureVideoSource.GLASSES ->
+                        StreamScreen(
+                            wearablesViewModel = viewModel,
+                            onSessionEnd = { messages, evidence ->
+                                sessionVm.saveStreamSession(messages, evidence)
+                            },
+                            onHankModeChange = { mode ->
+                                sessionVm.updateCaptureConfig { it.copy(hankMode = mode) }
+                            },
+                        )
+
+                    sessionState.isPhoneCaptureActive ->
+                        PhoneCameraStreamScreen(
+                            onBack = { sessionVm.endPhoneCapture() },
+                            onSessionEnd = { messages, evidence ->
+                                sessionVm.saveStreamSession(messages, evidence)
+                            },
+                            onHankModeChange = { mode ->
+                                sessionVm.updateCaptureConfig { it.copy(hankMode = mode) }
+                            },
+                        )
+
+                    else ->
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Box(modifier = Modifier.weight(1f, fill = true)) {
+                                when (sessionState.currentTab) {
+                                    AppTab.CAPTURE ->
+                                        CaptureScreen(
+                                            config = sessionState.config,
+                                            isGlassesRegistered = wearablesState.isRegistered,
+                                            hasActiveGlasses = wearablesState.hasActiveDevice,
+                                            onConfigChange = { sessionVm.updateConfig(it) },
+                                            onConnectGlasses = {
+                                                activity?.let { viewModel.startRegistration(it) }
+                                            },
+                                            onStartCapture = {
+                                                if (sessionState.config.capture.videoSource == CaptureVideoSource.GLASSES) {
+                                                    viewModel.navigateToStreaming(onRequestWearablesPermission)
+                                                } else {
+                                                    sessionVm.beginPhoneCapture()
+                                                }
+                                            },
+                                        )
+
+                                    AppTab.REPORT ->
+                                        InfoReportScreen(session = sessionVm.latestSession())
+
+                                    AppTab.SETTINGS ->
+                                        SettingsScreen(
+                                            config = sessionState.config,
+                                            onConfigChange = { sessionVm.updateConfig(it) },
+                                        )
+                                }
+                            }
+                            BottomNav(
+                                current = sessionState.currentTab,
+                                onSelect = { sessionVm.selectTab(it) },
+                            )
+                        }
                 }
-              }
-            },
-        )
 
-        if (BuildConfig.DEBUG) {
-          FloatingActionButton(
-              onClick = { viewModel.showDebugMenu() },
-              modifier = Modifier.align(Alignment.CenterEnd),
-          ) {
-            Icon(Icons.Default.BugReport, contentDescription = "Debug Menu")
-          }
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
 
-          if (uiState.isDebugMenuVisible) {
-            ModalBottomSheet(
-                onDismissRequest = { viewModel.hideDebugMenu() },
-                sheetState = bottomSheetState,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-              MockDeviceKitScreen(modifier = Modifier.fillMaxSize())
+                if (BuildConfig.DEBUG) {
+                    FloatingActionButton(
+                        onClick = { viewModel.showDebugMenu() },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) {
+                        Icon(Icons.Filled.BugReport, contentDescription = "Debug")
+                    }
+                }
+
+                if (wearablesState.isDebugMenuVisible) {
+                    ModalBottomSheet(
+                        onDismissRequest = { viewModel.hideDebugMenu() },
+                    ) {
+                        MockDeviceKitScreen()
+                    }
+                }
             }
-          }
         }
-      }
     }
-  }
-}
-
-/** Tab host — chat list / tips / settings / profile — sharing a bottom nav. */
-@Composable
-private fun MainTabs(
-    sessionVm: SessionViewModel,
-    onOpenProfile: () -> Unit,
-    onStartStream: () -> Unit,
-    isStreamingNow: Boolean = false,
-) {
-  val state by sessionVm.uiState.collectAsStateWithLifecycle()
-  Column(modifier = Modifier.fillMaxSize()) {
-    Box(modifier = Modifier.weight(1f)) {
-      when (state.currentTab) {
-        AppTab.CONVOS ->
-            ConvosScreen(
-                onNewSession = onStartStream,
-                isStreaming = isStreamingNow,
-            )
-        AppTab.CHATS ->
-            SessionsHomeScreen(
-                sessions = state.sessions,
-                userInitials = initialsOf(state.userProfile.name),
-                avatarColor = state.userProfile.avatarColor,
-                onOpenSession = { sessionVm.openSession(it) },
-                onNewChatOnly = { sessionVm.openChatOnly() },
-                onOpenProfile = onOpenProfile,
-            )
-        AppTab.ORDERS ->
-            OrdersScreen(
-                orders = state.orders,
-                openSessionCount = { id -> state.sessions.count { it.orderId == id } },
-                onOpenOrder = { sessionVm.openOrder(it) },
-                onNewOrder = { sessionVm.openNewOrderSheet() },
-            )
-        AppTab.SETTINGS ->
-            SettingsScreen(
-                settings = state.settings,
-                onSpeechRecognitionRouteChange = {
-                  sessionVm.updateSettings(state.settings.copy(speechRecognitionRoute = it))
-                },
-                onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
-                onTextScaleChange = {
-                  sessionVm.updateSettings(state.settings.copy(textScale = it))
-                },
-                onHighContrastChange = {
-                  sessionVm.updateSettings(state.settings.copy(highContrast = it))
-                },
-                onHapticChange = {
-                  sessionVm.updateSettings(state.settings.copy(hapticFeedback = it))
-                },
-            )
-      }
-    }
-    BottomNav(current = state.currentTab, onSelect = { sessionVm.selectTab(it) })
-  }
 }

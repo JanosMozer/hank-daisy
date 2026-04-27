@@ -13,6 +13,7 @@
 package com.meta.wearable.dat.externalsampleapps.mpi.stream
 
 import android.graphics.Bitmap
+import com.meta.wearable.dat.externalsampleapps.mpi.session.HankMode
 import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.camera.types.StreamSessionState
 
@@ -27,10 +28,12 @@ data class StreamUiState(
     val isListening: Boolean = false,
     val isWakeWordActive: Boolean = false,
     val isHankSpeaking: Boolean = false,
+    val hankMode: HankMode = HankMode.INTERACTIVE,
     val isAudioRecording: Boolean = false,
     val audioRecordingDurationMs: Long = 0L,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
+    val pendingReadOnlyContext: String? = null,
     val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,
     val chatMessages: List<ChatMessage> = emptyList(),
     val capturedEvidence: List<InspectionEvidence> = emptyList(),

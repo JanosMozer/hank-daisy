@@ -22,12 +22,14 @@ import com.meta.wearable.dat.externalsampleapps.mpi.stream.ChatMessage
 data class Session(
     val id: String,
     val createdAt: Long,
+    val endedAt: Long,
     val title: String,
     val description: String,
     val messages: List<ChatMessage>,
     val orderId: String? = null,
     val findingId: String? = null,
     val evidenceAssets: List<InspectionEvidence> = emptyList(),
+    val metadata: CaptureSessionMetadata? = null,
 ) {
     companion object {
         fun from(
@@ -35,26 +37,30 @@ data class Session(
             orderId: String? = null,
             findingId: String? = null,
             evidenceAssets: List<InspectionEvidence> = emptyList(),
+            metadata: CaptureSessionMetadata? = null,
         ): Session {
             val firstUser = messages.firstOrNull { it.role == ChatMessage.Role.USER }
             val firstHank = messages.firstOrNull { it.role == ChatMessage.Role.ASSISTANT }
             val title =
                 firstUser?.text?.trim()?.take(60)?.let { if (it.length >= 60) "$it…" else it }
-                    ?: "Untitled session"
+                    ?: "Untitled capture"
             val description =
                 firstHank?.text?.trim()?.take(120)?.let { if (it.length >= 120) "$it…" else it }
                     ?: "No reply captured."
             val createdAt =
                 messages.firstOrNull()?.timestamp ?: System.currentTimeMillis()
+            val endedAt = messages.lastOrNull()?.timestamp ?: createdAt
             return Session(
                 id = "session-${createdAt}-${messages.size}",
                 createdAt = createdAt,
+                endedAt = endedAt,
                 title = title,
                 description = description,
                 messages = messages,
                 orderId = orderId,
                 findingId = findingId,
                 evidenceAssets = evidenceAssets,
+                metadata = metadata,
             )
         }
     }

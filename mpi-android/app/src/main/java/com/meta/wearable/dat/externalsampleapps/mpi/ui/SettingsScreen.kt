@@ -1,17 +1,7 @@
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- * All rights reserved.
- *
- * This source code is licensed under the license found in the
- * LICENSE file in the root directory of this source tree.
- */
-
 package com.meta.wearable.dat.externalsampleapps.mpi.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,41 +13,30 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.meta.wearable.dat.externalsampleapps.mpi.session.AppSettings
+import com.meta.wearable.dat.externalsampleapps.mpi.session.AppConfig
+import com.meta.wearable.dat.externalsampleapps.mpi.session.DomainMode
 import com.meta.wearable.dat.externalsampleapps.mpi.session.SpeechRecognitionRoute
 import com.meta.wearable.dat.externalsampleapps.mpi.session.TextScale
 import com.meta.wearable.dat.externalsampleapps.mpi.session.ThemeMode
-import com.meta.wearable.dat.externalsampleapps.mpi.stream.SpeechRecognitionDebugStore
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.meta.wearable.dat.externalsampleapps.mpi.session.VoiceSpeed
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
-    settings: AppSettings,
-    onSpeechRecognitionRouteChange: (SpeechRecognitionRoute) -> Unit,
-    onThemeChange: (ThemeMode) -> Unit,
-    onTextScaleChange: (TextScale) -> Unit,
-    onHighContrastChange: (Boolean) -> Unit,
-    onHapticChange: (Boolean) -> Unit,
+    config: AppConfig,
+    onConfigChange: (AppConfig) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current.applicationContext
-    val speechDebug by remember(context) { SpeechRecognitionDebugStore.observe(context) }.collectAsState()
-
     Column(
         modifier =
             modifier
@@ -65,168 +44,163 @@ fun SettingsScreen(
                 .background(AppColors.Background)
                 .statusBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Spacer(Modifier.height(20.dp))
         Text(
             text = "Settings",
             color = AppColors.TextPrimary,
-            fontSize = 26.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
         )
-        Spacer(Modifier.height(20.dp))
+        Text(
+            text = "Tune the domain, speech route, Hank’s voice pacing, and the cadence of read-only commentary.",
+            color = AppColors.TextSecondary,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+        )
 
-        SettingsSection(title = "Assistant") {
-            SegmentedRow(
-                label = "Speech recognition",
-                options = SpeechRecognitionRoute.values().map { it.segmentLabel },
-                selectedIndex = settings.speechRecognitionRoute.ordinal,
-                onSelect = { onSpeechRecognitionRouteChange(SpeechRecognitionRoute.values()[it]) },
+        SettingsSection(title = "Scope") {
+            SegmentedButtons(
+                options = DomainMode.entries,
+                selected = config.general.domainMode,
+                optionLabel = { it.label },
+                onSelect = {
+                    onConfigChange(config.copy(general = config.general.copy(domainMode = it)))
+                },
             )
-            Spacer(Modifier.height(8.dp))
+        }
+
+        SettingsSection(title = "Speech recognition") {
+            SegmentedButtons(
+                options = SpeechRecognitionRoute.entries,
+                selected = config.speech.recognitionRoute,
+                optionLabel = { it.segmentLabel },
+                onSelect = {
+                    onConfigChange(config.copy(speech = config.speech.copy(recognitionRoute = it)))
+                },
+            )
+            Spacer(Modifier.height(10.dp))
             Text(
-                text = settings.speechRecognitionRoute.settingsDescription,
+                text = config.speech.recognitionRoute.settingsDescription,
                 color = AppColors.TextSecondary,
                 fontSize = 12.sp,
-                lineHeight = 18.sp,
+                lineHeight = 17.sp,
             )
         }
 
-        Spacer(Modifier.height(14.dp))
-
-        SettingsSection(title = "Appearance") {
-            SegmentedRow(
-                label = "Theme",
-                options = ThemeMode.values().map { it.name.lowercase().replaceFirstChar(Char::titlecase) },
-                selectedIndex = settings.themeMode.ordinal,
-                onSelect = { onThemeChange(ThemeMode.values()[it]) },
+        SettingsSection(title = "Hank voice") {
+            SegmentedButtons(
+                options = VoiceSpeed.entries,
+                selected = config.speech.voiceSpeed,
+                optionLabel = { it.label },
+                onSelect = {
+                    onConfigChange(config.copy(speech = config.speech.copy(voiceSpeed = it)))
+                },
             )
-            Spacer(Modifier.height(14.dp))
-            SegmentedRow(
-                label = "Text size",
-                options = TextScale.values().map { it.label },
-                selectedIndex = settings.textScale.ordinal,
-                onSelect = { onTextScaleChange(TextScale.values()[it]) },
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Read-only pause: ${(config.speech.readOnlyPauseMs / 1000f).let { String.format("%.1f", it) }}s",
+                color = AppColors.TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Slider(
+                value = config.speech.readOnlyPauseMs.toFloat(),
+                onValueChange = {
+                    onConfigChange(
+                        config.copy(
+                            speech = config.speech.copy(readOnlyPauseMs = it.roundToInt().toLong()),
+                        ),
+                    )
+                },
+                valueRange = 1500f..8000f,
+            )
+            Text(
+                text =
+                    "This pause controls how long Hank waits before the next read-only comment, effectively spacing the spoken commentary into digestible bursts.",
+                color = AppColors.TextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
             )
         }
 
-        Spacer(Modifier.height(14.dp))
+        SettingsSection(title = "Display") {
+            SegmentedButtons(
+                options = ThemeMode.entries,
+                selected = config.general.themeMode,
+                optionLabel = { it.name.lowercase().replaceFirstChar(Char::titlecase) },
+                onSelect = {
+                    onConfigChange(config.copy(general = config.general.copy(themeMode = it)))
+                },
+            )
+            Spacer(Modifier.height(12.dp))
+            SegmentedButtons(
+                options = TextScale.entries,
+                selected = config.general.textScale,
+                optionLabel = { it.label },
+                onSelect = {
+                    onConfigChange(config.copy(general = config.general.copy(textScale = it)))
+                },
+            )
+        }
 
         SettingsSection(title = "Accessibility") {
             ToggleRow(
                 label = "High contrast",
-                subtitle = "Darker borders + stronger text contrast.",
-                value = settings.highContrast,
-                onChange = onHighContrastChange,
+                subtitle = "Increase visual separation on cards, pills, and controls.",
+                value = config.general.highContrast,
+                onChange = {
+                    onConfigChange(config.copy(general = config.general.copy(highContrast = it)))
+                },
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             ToggleRow(
                 label = "Haptic feedback",
-                subtitle = "Vibrate when Hank barges in or you interrupt.",
-                value = settings.hapticFeedback,
-                onChange = onHapticChange,
+                subtitle = "Short vibration cues when Hank is interrupted or speech is captured.",
+                value = config.general.hapticFeedback,
+                onChange = {
+                    onConfigChange(config.copy(general = config.general.copy(hapticFeedback = it)))
+                },
             )
         }
-
-        Spacer(Modifier.height(14.dp))
-
-        SettingsSection(title = "About") {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Version", color = AppColors.TextSecondary, fontSize = 13.sp)
-                Text("0.1 · beta", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Model", color = AppColors.TextSecondary, fontSize = 13.sp)
-                Text("Gemini 3.1 flash lite", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Voice", color = AppColors.TextSecondary, fontSize = 13.sp)
-                Text("ElevenLabs flash v2.5", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Speech debug",
-                color = AppColors.TextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text =
-                    buildString {
-                        append("Active route: ")
-                        append(settings.speechRecognitionRoute.settingsLabel)
-                        append('\n')
-                        append("Last backend: ")
-                        append(speechDebug.backendLabel)
-                        if (speechDebug.modelId.isNotBlank()) {
-                            append(" · ")
-                            append(speechDebug.modelId)
-                        }
-                        append('\n')
-                        append("Last status: ")
-                        append(speechDebug.status)
-                        speechDebug.latencyMs?.let {
-                            append(" · ")
-                            append(it)
-                            append(" ms")
-                        }
-                        if (speechDebug.updatedAt > 0L) {
-                            append('\n')
-                            append("Updated: ")
-                            append(
-                                SimpleDateFormat("MMM d, HH:mm:ss", Locale.US)
-                                    .format(Date(speechDebug.updatedAt)),
-                            )
-                        }
-                        if (speechDebug.transcript.isNotBlank()) {
-                            append('\n')
-                            append("Last text: ")
-                            append(speechDebug.transcript.take(120))
-                            if (speechDebug.transcript.length > 120) append("...")
-                        }
-                    },
-                color = AppColors.TextSecondary,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-            )
-        }
-
-        Spacer(Modifier.height(80.dp))
     }
 }
 
 @Composable
-private fun SettingsSection(title: String, content: @Composable () -> Unit) {
-    Text(
-        text = title.uppercase(),
-        color = AppColors.TextMuted,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-    )
-    Spacer(Modifier.height(6.dp))
+private fun SettingsSection(
+    title: String,
+    content: @Composable () -> Unit,
+) {
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .background(AppColors.Surface, shape = RoundedCornerShape(12.dp))
+                .background(AppColors.Surface, RoundedCornerShape(18.dp))
                 .padding(16.dp),
     ) {
+        Text(
+            text = title.uppercase(),
+            color = AppColors.TextMuted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(10.dp))
         content()
     }
 }
 
 @Composable
-private fun ToggleRow(label: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+private fun ToggleRow(
+    label: String,
+    subtitle: String,
+    value: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(label, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = AppColors.TextSecondary, fontSize = 11.sp)
+            Text(subtitle, color = AppColors.TextSecondary, fontSize = 12.sp, lineHeight = 17.sp)
         }
         Switch(
             checked = value,
@@ -239,46 +213,5 @@ private fun ToggleRow(label: String, subtitle: String, value: Boolean, onChange:
                     uncheckedTrackColor = AppColors.Border,
                 ),
         )
-    }
-}
-
-@Composable
-private fun SegmentedRow(
-    label: String,
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-) {
-    Text(label, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(6.dp))
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(10.dp))
-                .padding(3.dp),
-    ) {
-        options.forEachIndexed { i, opt ->
-            val isSelected = i == selectedIndex
-            Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .background(
-                            if (isSelected) AppColors.Accent else AppColors.SurfaceAlt,
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .clickable { onSelect(i) }
-                        .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = opt,
-                    color = if (isSelected) AppColors.AccentOn else AppColors.TextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
     }
 }

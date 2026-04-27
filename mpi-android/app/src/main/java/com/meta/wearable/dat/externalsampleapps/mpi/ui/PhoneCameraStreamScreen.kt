@@ -38,21 +38,19 @@ import com.meta.wearable.dat.externalsampleapps.mpi.R
 import com.meta.wearable.dat.externalsampleapps.mpi.session.HankMode
 import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.ChatMessage
-import com.meta.wearable.dat.externalsampleapps.mpi.stream.StreamViewModel
-import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
+import com.meta.wearable.dat.externalsampleapps.mpi.stream.PhoneCameraStreamViewModel
 
 @Composable
-fun StreamScreen(
-    wearablesViewModel: WearablesViewModel,
+fun PhoneCameraStreamScreen(
     modifier: Modifier = Modifier,
+    onBack: () -> Unit,
     onSessionEnd: (List<ChatMessage>, List<InspectionEvidence>) -> Unit = { _, _ -> },
     onHankModeChange: (HankMode) -> Unit = {},
-    streamViewModel: StreamViewModel =
+    streamViewModel: PhoneCameraStreamViewModel =
         viewModel(
             factory =
-                StreamViewModel.Factory(
+                PhoneCameraStreamViewModel.Factory(
                     application = (LocalActivity.current as ComponentActivity).application,
-                    wearablesViewModel = wearablesViewModel,
                 ),
         ),
 ) {
@@ -80,14 +78,12 @@ fun StreamScreen(
                 )
             }
         }
-
         if (streamUiState.streamSessionState == StreamSessionState.STARTING) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
 
         ChatPanel(
             messages = streamUiState.chatMessages,
-            onExport = { streamViewModel.exportSession() },
             modifier =
                 Modifier
                     .align(Alignment.TopCenter)
@@ -104,12 +100,12 @@ fun StreamScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatusChip(
-                title = if (streamUiState.hankMode == HankMode.READ_ONLY) "Read-only mode" else "Interactive mode",
+                title = "Phone camera",
                 body =
                     if (streamUiState.hankMode == HankMode.READ_ONLY) {
-                        "Hank keeps watching the scene and folds in only relevant captured speech."
+                        "Using the phone camera with hands-free commentary mode."
                     } else {
-                        "Hank answers direct spoken questions and keeps the turn loop live."
+                        "Using the phone camera with interactive Hank replies."
                     },
             )
             if (!streamUiState.pendingReadOnlyContext.isNullOrBlank()) {
@@ -119,18 +115,18 @@ fun StreamScreen(
                     background = Color(0xFF0F766E).copy(alpha = 0.88f),
                 )
             }
-            val audioMessage =
-                when (streamUiState.glassesAudioStatus) {
-                    com.meta.wearable.dat.externalsampleapps.mpi.stream.GlassesAudioManager.AudioStatus.NONE ->
-                        "Phone audio fallback. Pair the glasses as Bluetooth audio for voice in/out."
-                    com.meta.wearable.dat.externalsampleapps.mpi.stream.GlassesAudioManager.AudioStatus.SPEAKER_ONLY ->
-                        "Replies are on the glasses; speech input still falls back to the phone."
-                    com.meta.wearable.dat.externalsampleapps.mpi.stream.GlassesAudioManager.AudioStatus.MIC_ONLY ->
-                        "Glasses mic is available; replies still play on the phone."
-                    com.meta.wearable.dat.externalsampleapps.mpi.stream.GlassesAudioManager.AudioStatus.FULL ->
-                        "Glasses audio path is active."
+            val routeMessage =
+                when (streamUiState.audioRouteStatus) {
+                    com.meta.wearable.dat.externalsampleapps.mpi.stream.AudioRouteManager.AudioStatus.NONE ->
+                        "No external audio route detected. Voice stays on the phone."
+                    com.meta.wearable.dat.externalsampleapps.mpi.stream.AudioRouteManager.AudioStatus.SPEAKER_ONLY ->
+                        "Bluetooth speaker route is available for Hank's replies."
+                    com.meta.wearable.dat.externalsampleapps.mpi.stream.AudioRouteManager.AudioStatus.MIC_ONLY ->
+                        "Bluetooth mic route is available for incoming speech."
+                    com.meta.wearable.dat.externalsampleapps.mpi.stream.AudioRouteManager.AudioStatus.FULL ->
+                        "Bluetooth mic and speaker routes are active."
                 }
-            StatusChip(title = "Audio path", body = audioMessage)
+            StatusChip(title = "Audio path", body = routeMessage)
         }
 
         StatusPill(
@@ -159,7 +155,7 @@ fun StreamScreen(
         ) {
             SwitchButton(
                 label = stringResource(R.string.stop_stream_button_title),
-                onClick = { wearablesViewModel.navigateToDeviceSelection() },
+                onClick = onBack,
                 isDestructive = true,
                 modifier = Modifier.weight(1f),
             )

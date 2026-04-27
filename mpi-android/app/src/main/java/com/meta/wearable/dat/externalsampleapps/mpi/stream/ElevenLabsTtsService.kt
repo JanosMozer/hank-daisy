@@ -1,16 +1,9 @@
-/*
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- * All rights reserved.
- *
- * This source code is licensed under the license found in the
- * LICENSE file in the root directory of this source tree.
- */
-
 package com.meta.wearable.dat.externalsampleapps.mpi.stream
 
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.os.Build
 import android.util.Log
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -32,25 +25,15 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-/**
- * High-quality TTS via ElevenLabs. Plays each sentence as soon as its audio is
- * fetched, so barge-in only has to interrupt the *current* sentence (~300ms-2s)
- * rather than the full reply.
- *
- * Returns "did we manage to handle this?" from [speak] so the caller can fall
- * back to Android TTS on first-sentence failure (bad key, no network, etc.).
- */
 class ElevenLabsTtsService(
     private val context: Context,
     private val voiceId: String,
     private val apiKey: String,
     private val onSpeakingChanged: (Boolean) -> Unit,
+    private val voiceSpeedProvider: () -> Float = { 1.0f },
 ) {
     companion object {
         private const val TAG = "HankDaisy:ElevenLabs"
-        // eleven_flash_v2_5 is ElevenLabs' lowest-latency model (~75ms
-        // first-chunk generation vs ~300ms for turbo). Slightly less
-        // expressive but much faster for realtime conversation.
         private const val MODEL_ID = "eleven_flash_v2_5"
         private const val ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech"
     }
@@ -66,15 +49,12 @@ class ElevenLabsTtsService(
     private val queue = ArrayDeque<String>()
     private var consumerJob: Job? = null
     private var currentPlayer: MediaPlayer? = null
+    private var activeRunId = 0L
+    private var cancelledRunId = 0L
 
     val isConfigured: Boolean
         get() = apiKey.isNotBlank() && voiceId.isNotBlank()
 
-    /**
-     * Returns true if speak was accepted (config valid). [onAllFailed] fires if
-     * the queue drains without any sentence successfully playing — caller
-     * should fall back to Android TTS in that case.
-     */
     fun speak(sentences: List<String>, onAllFailed: () -> Unit = {}): Boolean {
         if (!isConfigured) {
             Log.w(TAG, "Not configured — apiKey blank=${apiKey.isBlank()} voiceId blank=${voiceId.isBlank()}")
@@ -90,11 +70,16 @@ class ElevenLabsTtsService(
     }
 
     fun stop() {
+        val cancelledRun =
+            synchronized(this) {
+                activeRunId.also { runId ->
+                    if (runId != 0L) cancelledRunId = runId
+                }
+            }
+        if (cancelledRun != 0L) {
+            Log.d(TAG, "Stopping run $cancelledRun")
+        }
         synchronized(queue) { queue.clear() }
-        // Silence FIRST — MediaPlayer.stop() has a flush lag where buffered
-        // audio keeps coming out for ~150-300ms. setVolume(0) is instant
-        // because it's applied in the mixer, so the user perceives the cut
-        // immediately even though the stop/release happens a beat later.
         try {
             currentPlayer?.setVolume(0f, 0f)
         } catch (_: Exception) {}
@@ -118,48 +103,39 @@ class ElevenLabsTtsService(
     private fun startConsumer(onAllFailed: () -> Unit) {
         val existing = consumerJob
         if (existing != null && existing.isActive) return
+        val runId =
+            synchronized(this) {
+                activeRunId += 1
+                activeRunId
+            }
         onSpeakingChanged(true)
         consumerJob =
             scope.launch {
                 var anyPlayed = false
                 try {
-                    // Pipeline: while the current clause's audio is playing we
-                    // fetch the next clause in parallel via `async`. Uses
-                    // coroutineScope so the async child is cancelled when the
-                    // consumer is cancelled (via stop()).
                     coroutineScope {
-                        var prefetch: Deferred<ByteArray?>? = null
-                        var prefetchedFor: String? = null
-                        while (isActive) {
-                            val sentence =
+                        var nextText: String? =
+                            synchronized(queue) { if (queue.isEmpty()) null else queue.removeFirst() }
+                        var prefetched: Deferred<ByteArray?>? =
+                            nextText?.let { async { fetchAudio(it) } }
+
+                        while (isActive && nextText != null && prefetched != null) {
+                            val currentText = nextText
+                            val currentFetch = prefetched
+
+                            nextText =
                                 synchronized(queue) {
                                     if (queue.isEmpty()) null else queue.removeFirst()
-                                } ?: break
-                            val mp3: ByteArray? =
-                                if (prefetchedFor == sentence && prefetch != null) {
-                                    try {
-                                        prefetch.await()
-                                    } catch (_: Exception) {
-                                        null
-                                    }
-                                } else {
-                                    prefetch?.cancel()
-                                    fetchAudio(sentence)
                                 }
-                            prefetch = null
-                            prefetchedFor = null
-                            if (mp3 == null) {
-                                Log.w(TAG, "Skipping clause — fetch failed: ${sentence.take(40)}")
+                            prefetched = nextText?.let { queued -> async { fetchAudio(queued) } }
+
+                            val bytes = currentFetch.await()
+                            if (bytes == null || bytes.isEmpty()) {
+                                Log.w(TAG, "No audio bytes for sentence: ${currentText.take(80)}")
                                 continue
                             }
-                            val file = writeTempFile(mp3)
-                            // Kick off prefetch for the next clause so audio is
-                            // ready the moment current playback ends.
-                            val next = synchronized(queue) { queue.firstOrNull() }
-                            if (next != null) {
-                                prefetchedFor = next
-                                prefetch = async { fetchAudio(next) }
-                            }
+
+                            val file = writeTempFile(bytes)
                             try {
                                 playAndAwait(file)
                                 anyPlayed = true
@@ -169,17 +145,30 @@ class ElevenLabsTtsService(
                                 } catch (_: Exception) {}
                             }
                         }
-                        prefetch?.cancel()
                     }
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    throw ce
+                } catch (e: Exception) {
+                    Log.e(TAG, "Sentence player crashed", e)
                 } finally {
                     onSpeakingChanged(false)
-                    if (!anyPlayed) {
+                    consumerJob = null
+                    val shouldFallback =
+                        synchronized(this@ElevenLabsTtsService) {
+                            val cancelled = cancelledRunId == runId
+                            if (cancelled) cancelledRunId = 0L
+                            if (activeRunId == runId) activeRunId = 0L
+                            !cancelled
+                        }
+                    if (!anyPlayed && shouldFallback) {
                         Log.w(TAG, "Queue drained with nothing played — invoking fallback")
                         try {
                             onAllFailed()
                         } catch (e: Exception) {
                             Log.w(TAG, "onAllFailed callback threw", e)
                         }
+                    } else if (!anyPlayed) {
+                        Log.d(TAG, "Suppressing fallback for cancelled run $runId")
                     }
                 }
             }
@@ -264,6 +253,9 @@ class ElevenLabsTtsService(
                             true
                         }
                         prepare()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            playbackParams = playbackParams.setSpeed(voiceSpeedProvider().coerceIn(0.8f, 1.4f))
+                        }
                         start()
                     }
                 currentPlayer = player
