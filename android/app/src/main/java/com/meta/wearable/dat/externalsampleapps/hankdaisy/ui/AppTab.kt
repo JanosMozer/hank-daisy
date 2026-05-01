@@ -9,37 +9,13 @@
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Build
-import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.ui.graphics.vector.ImageVector
 
-/**
- * Bottom-nav destinations.
- *  - CONVOS  : entry point for a fresh live, glasses-mediated call.
- *  - CHATS   : library of past free-form sessions + "+" for a text/voice
- *              chat (no glasses). Order-linked sessions live inside each
- *              order rather than here.
- *  - ORDERS  : repair orders — the primary workspace for the shop pivot.
- *              Replaces the former TIPS tab; tip content moves to Settings.
- *  - SETTINGS: theme / accessibility / help / about.
- *
- * Profile is intentionally NOT a tab — it's a modal opened from the
- * avatar on the Chats home (a tab loop bug previously kept reopening it).
- */
-enum class AppTab(val label: String, val icon: ImageVector) {
-    CONVOS("Convos", Icons.Outlined.RecordVoiceOver),
-    CHATS("Chats", Icons.Outlined.Forum),
-    ORDERS("Orders", Icons.Outlined.Build),
+enum class TopLevelTab(val label: String, val icon: ImageVector) {
+    DEMO("Demo", Icons.Outlined.RecordVoiceOver),
+    PIPELINE("Pipeline", Icons.Outlined.Tune),
     SETTINGS("Settings", Icons.Outlined.Settings),
-    ;
-
-    companion object {
-        // Demo branch starts by narrowing the shell to the live assist path
-        // plus settings, while leaving the deeper screens in history.
-        val demoTabs: List<AppTab> = listOf(CONVOS, SETTINGS)
-
-        fun coerceToDemo(tab: AppTab): AppTab = if (tab in demoTabs) tab else CONVOS
-    }
 }

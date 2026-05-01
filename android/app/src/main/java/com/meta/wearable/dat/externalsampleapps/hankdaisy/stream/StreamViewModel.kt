@@ -45,6 +45,8 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.DeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.session.Session
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppConfigStore
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.VideoQualityPreset
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables.WearablesViewModel
 import java.io.ByteArrayInputStream
@@ -147,11 +149,7 @@ class StreamViewModel(
       // backwards compatibility.
       val hapticEnabled =
           try {
-            val raw =
-                app.getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
-                    .getString("settings_json", null)
-            if (raw == null) true
-            else org.json.JSONObject(raw).optBoolean("hapticFeedback", true)
+            AppConfigStore.current(app).general.hapticFeedback
           } catch (_: Exception) {
             true
           }
@@ -278,7 +276,7 @@ class StreamViewModel(
                 Log.w(TAG, "scene watcher observe failed", e)
               }
             }
-            delay(300L)
+            delay((1000L / currentModelSendFps()).coerceAtLeast(120L))
           }
         }
   }
@@ -344,7 +342,23 @@ class StreamViewModel(
                         if (demoCommentaryMode) emptyList() else conversationHistory.toList(),
                     systemPromptOverride = systemPromptOverride,
                 )
-            val cleaned = response.trim().lowercase()
+            val preparedResponse =
+                AssistantResponsePolicy.prepare(
+                    raw = response,
+                    mode =
+                        if (demoCommentaryMode) AssistantResponseMode.VISUAL_DEMO
+                        else AssistantResponseMode.CONVERSATION,
+                )
+            if (preparedResponse.wasSanitized) {
+              Log.w(TAG, "Sanitized autonomous assistant response before speech/history")
+            }
+            if (preparedResponse.usedFallback) {
+              Log.w(TAG, "Dropped autonomous assistant response after meta-term contamination")
+              _uiState.update { it.copy(isAnalyzing = false) }
+              return@launch
+            }
+            val safeResponse = preparedResponse.text
+            val cleaned = safeResponse.trim().lowercase()
             _uiState.update { it.copy(isAnalyzing = false) }
             if (cleaned.contains("<quiet>") ||
                 cleaned == "quiet" ||
@@ -354,14 +368,14 @@ class StreamViewModel(
             }
             if (!demoCommentaryMode) {
               // Append to conversation so subsequent user turns see this comment.
-              conversationHistory.add(GeminiService.Turn("assistant", response))
+              conversationHistory.add(GeminiService.Turn("assistant", safeResponse))
               while (conversationHistory.size > 24) {
                 conversationHistory.removeAt(0)
               }
             }
-            appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
-            _uiState.update { it.copy(lastGeminiResponse = response) }
-            glassesAudio.speak(response)
+            appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, safeResponse))
+            _uiState.update { it.copy(lastGeminiResponse = safeResponse) }
+            glassesAudio.speak(safeResponse)
             lastTurnAt = System.currentTimeMillis()
           } catch (e: Exception) {
             Log.e(TAG, "autonomousObservation failed", e)
@@ -388,16 +402,23 @@ class StreamViewModel(
 
   private fun currentDemoCommentaryMode(): Boolean {
     return try {
-      val raw =
-          getApplication<Application>()
-              .getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
-              .getString("settings_json", null)
-      if (raw == null) false
-      else org.json.JSONObject(raw).optBoolean("demoCommentaryMode", false)
+      AppConfigStore.current(getApplication()).general.demoCommentaryMode
     } catch (_: Exception) {
       false
     }
   }
+
+  private fun currentSourceFps(): Int = AppConfigStore.current(getApplication()).video.sourceFps
+
+  private fun currentModelSendFps(): Int =
+      AppConfigStore.current(getApplication()).video.modelSendFps.coerceIn(1, 10)
+
+  private fun currentVideoQuality(): VideoQuality =
+      when (AppConfigStore.current(getApplication()).video.quality) {
+        VideoQualityPreset.LOW -> VideoQuality.LOW
+        VideoQualityPreset.MEDIUM -> VideoQuality.MEDIUM
+        VideoQualityPreset.HIGH -> VideoQuality.HIGH
+      }
 
   private fun refreshActiveModes() {
     demoCommentaryMode = currentDemoCommentaryMode()
@@ -488,7 +509,12 @@ class StreamViewModel(
               stream = null
               try {
                 session
-                    ?.addStream(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, 24))
+                    ?.addStream(
+                        StreamConfiguration(
+                            videoQuality = currentVideoQuality(),
+                            frameRate = currentSourceFps(),
+                        ),
+                    )
                     ?.onSuccess { addedStream ->
                       stream = addedStream
                       videoJob =
@@ -675,21 +701,50 @@ class StreamViewModel(
       voiceCommand.state.collect { voiceState ->
         when (voiceState) {
           is VoiceCommandManager.VoiceState.Passive -> {
-            _uiState.update { it.copy(isListening = false, isWakeWordActive = true) }
+            _uiState.update {
+              it.copy(
+                  isListening = false,
+                  isWakeWordActive = true,
+                  voiceStatusMessage = null,
+              )
+            }
           }
           is VoiceCommandManager.VoiceState.Listening -> {
-            _uiState.update { it.copy(isListening = true) }
+            _uiState.update {
+              it.copy(
+                  isListening = true,
+                  voiceStatusMessage = "Heard you — keep talking.",
+              )
+            }
           }
           is VoiceCommandManager.VoiceState.QuestionReady -> {
-            _uiState.update { it.copy(isListening = false, spokenQuestion = voiceState.text) }
+            _uiState.update {
+              it.copy(
+                  isListening = false,
+                  spokenQuestion = voiceState.text,
+                  voiceStatusMessage = null,
+              )
+            }
             analyzeWithQuestion(voiceState.text)
           }
           is VoiceCommandManager.VoiceState.Error -> {
             Log.w(TAG, "Voice error: ${voiceState.message}")
-            // Don't show errors in UI for passive mode — just keep listening
+            _uiState.update {
+              it.copy(
+                  isListening = false,
+                  isWakeWordActive = false,
+                  voiceStatusMessage = voiceState.message,
+              )
+            }
           }
           is VoiceCommandManager.VoiceState.Off -> {
-            _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+            _uiState.update {
+              it.copy(
+                  isListening = false,
+                  isWakeWordActive = false,
+                  voiceStatusMessage = null,
+              )
+            }
           }
         }
       }
@@ -700,7 +755,13 @@ class StreamViewModel(
   /** Manual Ask Hank — skips wake word, goes straight to listening for question. */
   fun askHank() {
     if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
-    _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
+    _uiState.update {
+      it.copy(
+          lastGeminiResponse = null,
+          spokenQuestion = null,
+          voiceStatusMessage = "Listening for your question.",
+      )
+    }
     voiceCommand.startManualListen()
   }
 
@@ -782,19 +843,28 @@ class StreamViewModel(
           val historySnapshot = conversationHistory.toList()
           val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
           frameCopy?.recycle()
+          val preparedResponse =
+              AssistantResponsePolicy.prepare(
+                  raw = response,
+                  mode = AssistantResponseMode.CONVERSATION,
+              )
+          if (preparedResponse.wasSanitized) {
+            Log.w(TAG, "Sanitized assistant response before speech/history")
+          }
+          val safeResponse = preparedResponse.text
 
           conversationHistory.add(GeminiService.Turn("user", question))
-          conversationHistory.add(GeminiService.Turn("assistant", response))
+          conversationHistory.add(GeminiService.Turn("assistant", safeResponse))
           while (conversationHistory.size > 24) {
             conversationHistory.removeAt(0)
           }
           appendChatMessages(
               ChatMessage(ChatMessage.Role.USER, question),
-              ChatMessage(ChatMessage.Role.ASSISTANT, response),
+              ChatMessage(ChatMessage.Role.ASSISTANT, safeResponse),
           )
 
-          _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
-          glassesAudio.speak(response)
+          _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = safeResponse) }
+          glassesAudio.speak(safeResponse)
           lastTurnAt = System.currentTimeMillis()
         }
   }
@@ -802,7 +872,13 @@ class StreamViewModel(
   fun cancelListening() {
     voiceCommand.stopContinuousListening()
     voiceJob?.cancel()
-    _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+    _uiState.update {
+      it.copy(
+          isListening = false,
+          isWakeWordActive = false,
+          voiceStatusMessage = null,
+      )
+    }
   }
 
 

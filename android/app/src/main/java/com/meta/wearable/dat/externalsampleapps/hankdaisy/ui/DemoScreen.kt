@@ -36,76 +36,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppConfig
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 import kotlinx.coroutines.delay
 
-/**
- * Landing tab for starting a live camera conversation with Hank.
- * Minimal UI: a hero block explaining what this is, then a prominent
- * purple "+" FAB anchored at the bottom-center to start the call.
- */
 @Composable
-fun ConvosScreen(
-    onNewSession: () -> Unit,
-    workDomain: WorkDomain,
-    captureMode: CaptureMode,
-    /** True once navigateToStreaming has set isStreaming=true. If it stays
-     * false for too long after a tap, we surface an error so the user
-     * knows the stream never actually kicked off. */
-    isStreaming: Boolean = false,
+fun DemoScreen(
+    config: AppConfig,
+    isStreaming: Boolean,
+    onStartDemo: () -> Unit,
+    onCaptureModeChange: (CaptureMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var starting by remember { mutableStateOf(false) }
     var timedOut by remember { mutableStateOf(false) }
+    val captureMode = config.demo.captureMode
     val usingPhoneCamera = captureMode == CaptureMode.PHONE_CAMERA
-    val convoSubtitle =
-        if (usingPhoneCamera) {
-            when (workDomain) {
-                WorkDomain.CAR -> "Live car repair calls with Hank, through your phone camera."
-                WorkDomain.BICYCLE ->
-                    "Live bicycle repair calls with Hank, through your phone camera."
-                WorkDomain.GENERAL_PURPOSE ->
-                    "Live hands-free repair calls with Hank, through your phone camera."
-            }
-        } else {
-            workDomain.convoSubtitle
-        }
-    val convoBody =
-        if (usingPhoneCamera) {
-            "Starts the live stream from your phone camera and opens the voice loop " +
-                "with Hank. He sees what you see and guides you through ${workDomain.workDescriptor()} " +
-                "one step at a time."
-        } else {
-            workDomain.convoBody()
-        }
-    val supportingText =
-        if (usingPhoneCamera) {
-            "Past conversations show up under the Chats tab. Switch back to Ray-Ban Meta " +
-                "glasses from Settings anytime."
-        } else {
-            "Past conversations show up under the Chats tab. To talk to Hank without the " +
-                "glasses, use the Chats tab's + button."
-        }
-    val timeoutText =
-        if (usingPhoneCamera) {
-            "Couldn't start the phone camera. Check that Camera and Microphone permissions " +
-                "are granted, then tap + again."
-        } else {
-            "Couldn't start the glasses stream. Check that your Ray-Ban Meta is paired in " +
-                "the Meta AI app and Camera permission is granted, then tap + again."
-        }
+    val workDomain = config.general.workDomain
 
-    // If the scaffold flips to streaming, the whole screen swaps to
-    // StreamScreen; this state just resets so the overlay is gone on return.
     LaunchedEffect(isStreaming) {
         if (isStreaming) {
             starting = false
             timedOut = false
         }
     }
-    // Timeout: if starting is still true 8s after a tap, assume the stream
-    // never kicked off (glasses not paired, permission revoked, etc.).
     LaunchedEffect(starting) {
         if (starting) {
             timedOut = false
@@ -113,6 +67,7 @@ fun ConvosScreen(
             if (starting) timedOut = true
         }
     }
+
     Box(
         modifier =
             modifier
@@ -122,54 +77,105 @@ fun ConvosScreen(
                 .navigationBarsPadding(),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 32.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 24.dp),
         ) {
             Text(
-                text = "Convos",
+                text = "Demo",
                 color = AppColors.Accent,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
-                text = convoSubtitle,
+                text = "One shared live-assist flow, switchable between glasses and phone hardware.",
                 color = AppColors.TextSecondary,
                 fontSize = 13.sp,
             )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(18.dp))
+            SegmentedRow(
+                label = "Mode",
+                options = listOf("Glasses", "Phone"),
+                selectedIndex = if (captureMode == CaptureMode.GLASSES) 0 else 1,
+                onSelect = {
+                    onCaptureModeChange(
+                        if (it == 0) CaptureMode.GLASSES else CaptureMode.PHONE_CAMERA,
+                    )
+                },
+            )
+            Spacer(Modifier.height(22.dp))
             Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .background(
-                            AppColors.Surface,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                        )
+                        .background(AppColors.Surface, shape = RoundedCornerShape(14.dp))
                         .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "Tap the + below",
+                    text = if (usingPhoneCamera) "Phone demo" else "Glasses demo",
                     color = AppColors.TextPrimary,
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = convoBody,
+                    text =
+                        if (usingPhoneCamera) {
+                            "Runs Hank through the Android camera, microphone, and speaker. No glasses required."
+                        } else {
+                            "Runs Hank through the DAT glasses flow, with glasses video and glasses-preferred audio routing."
+                        },
                     color = AppColors.TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                 )
                 Text(
-                    text = supportingText,
+                    text =
+                        buildString {
+                            append("Work domain: ")
+                            append(workDomain.settingsLabel)
+                            append('\n')
+                            append("Speech route: ")
+                            append(config.audio.transcription.route.settingsLabel)
+                            append('\n')
+                            append("Source FPS: ")
+                            append(config.video.sourceFps)
+                            append(" · Model FPS: ")
+                            append(config.video.modelSendFps)
+                        },
                     color = AppColors.TextMuted,
                     fontSize = 12.sp,
-                    lineHeight = 17.sp,
+                    lineHeight = 18.sp,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(AppColors.Surface, shape = RoundedCornerShape(14.dp))
+                        .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Start flow",
+                    color = AppColors.TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text =
+                        if (usingPhoneCamera) {
+                            "Starts the phone camera stream and the live voice loop. Hank sees the current scene and answers through the phone."
+                        } else {
+                            workDomain.convoBody()
+                        },
+                    color = AppColors.TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
                 )
             }
         }
 
-        // Prominent purple + at the bottom-center
         Box(
             modifier =
                 Modifier
@@ -180,7 +186,7 @@ fun ConvosScreen(
                     .clickable(enabled = !starting) {
                         starting = true
                         timedOut = false
-                        onNewSession()
+                        onStartDemo()
                     },
             contentAlignment = Alignment.Center,
         ) {
@@ -200,21 +206,17 @@ fun ConvosScreen(
             }
         }
 
-        // "Starting camera…" pill above the button while we wait for DAT.
         if (starting && !timedOut) {
             Box(
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 116.dp)
-                        .background(
-                            AppColors.Surface,
-                            shape = RoundedCornerShape(12.dp),
-                        )
+                        .background(AppColors.Surface, shape = RoundedCornerShape(12.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
-                    text = "Starting camera…",
+                    text = "Starting demo…",
                     color = AppColors.TextPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -222,25 +224,25 @@ fun ConvosScreen(
             }
         }
 
-        // After ~8s with no stream, surface a practical message so the user
-        // isn't stuck staring at a spinner.
         if (timedOut) {
             Box(
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 116.dp, start = 24.dp, end = 24.dp)
-                        .background(
-                            androidx.compose.ui.graphics.Color(0xFFB91C1C),
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 24.dp, vertical = 120.dp)
+                        .background(AppColors.Surface, shape = RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text(
-                    text = timeoutText,
-                    color = androidx.compose.ui.graphics.Color.White,
+                    text =
+                        if (usingPhoneCamera) {
+                            "Phone demo failed to start. Check camera and microphone permissions, then try again."
+                        } else {
+                            "Glasses demo failed to start. Check Meta AI pairing, registration, and camera permission, then try again."
+                        },
+                    color = AppColors.TextPrimary,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
                 )
             }
         }

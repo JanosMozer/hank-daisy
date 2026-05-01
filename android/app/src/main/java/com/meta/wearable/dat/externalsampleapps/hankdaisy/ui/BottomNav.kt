@@ -33,9 +33,9 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun BottomNav(
-    current: AppTab,
-    tabs: List<AppTab> = AppTab.values().toList(),
-    onSelect: (AppTab) -> Unit,
+    current: TopLevelTab,
+    tabs: List<TopLevelTab> = TopLevelTab.values().toList(),
+    onSelect: (TopLevelTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -64,7 +64,7 @@ fun BottomNav(
 
 @Composable
 private fun NavItem(
-    tab: AppTab,
+    tab: TopLevelTab,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

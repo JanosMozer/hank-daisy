@@ -25,5 +25,6 @@ data class PhoneCameraStreamUiState(
     val isDemoCommentaryMode: Boolean = false,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
+    val voiceStatusMessage: String? = null,
     val chatMessages: List<ChatMessage> = emptyList(),
 )

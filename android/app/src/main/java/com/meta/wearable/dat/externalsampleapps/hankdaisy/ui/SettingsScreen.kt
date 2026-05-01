@@ -9,9 +9,7 @@
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,37 +19,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppSettings
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.SpeechRecognitionRoute
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.GeneralSettings
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.TextScale
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.ThemeMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.SpeechRecognitionDebugStore
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun SettingsScreen(
-    settings: AppSettings,
-    onCaptureModeChange: (CaptureMode) -> Unit,
-    onSpeechRecognitionRouteChange: (SpeechRecognitionRoute) -> Unit,
+    settings: GeneralSettings,
     onWorkDomainChange: (WorkDomain) -> Unit,
     onDemoCommentaryModeChange: (Boolean) -> Unit,
     onThemeChange: (ThemeMode) -> Unit,
@@ -60,9 +42,6 @@ fun SettingsScreen(
     onHapticChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current.applicationContext
-    val speechDebug by remember(context) { SpeechRecognitionDebugStore.observe(context) }.collectAsState()
-
     Column(
         modifier =
             modifier
@@ -82,32 +61,6 @@ fun SettingsScreen(
         Spacer(Modifier.height(20.dp))
 
         SettingsSection(title = "Assistant") {
-            ToggleRow(
-                label = "Use phone camera",
-                subtitle =
-                    "Off uses Ray-Ban Meta glasses through DAT. On uses the phone camera with the same Hank workflow.",
-                value = settings.captureMode == CaptureMode.PHONE_CAMERA,
-                onChange = {
-                    onCaptureModeChange(
-                        if (it) CaptureMode.PHONE_CAMERA else CaptureMode.GLASSES,
-                    )
-                },
-            )
-            Spacer(Modifier.height(14.dp))
-            SegmentedRow(
-                label = "Speech recognition",
-                options = SpeechRecognitionRoute.values().map { it.segmentLabel },
-                selectedIndex = settings.speechRecognitionRoute.ordinal,
-                onSelect = { onSpeechRecognitionRouteChange(SpeechRecognitionRoute.values()[it]) },
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = settings.speechRecognitionRoute.settingsDescription,
-                color = AppColors.TextSecondary,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-            )
-            Spacer(Modifier.height(14.dp))
             SegmentedRow(
                 label = "Mode",
                 options = WorkDomain.values().map { it.segmentLabel },
@@ -115,17 +68,12 @@ fun SettingsScreen(
                 onSelect = { onWorkDomainChange(WorkDomain.values()[it]) },
             )
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = settings.workDomain.modeDescription,
-                color = AppColors.TextSecondary,
-                fontSize = 12.sp,
-                lineHeight = 18.sp,
-            )
+            HelperText(text = settings.workDomain.modeDescription)
             Spacer(Modifier.height(14.dp))
             ToggleRow(
                 label = "Visual demo mode",
                 subtitle =
-                    "Turns off the mic loop. Hank narrates scene changes, likely next steps, and common issues or P-codes when relevant.",
+                    "Turns off the mic loop. Hank narrates scene changes, likely next steps, and common issues when relevant.",
                 value = settings.demoCommentaryMode,
                 onChange = onDemoCommentaryModeChange,
             )
@@ -154,14 +102,14 @@ fun SettingsScreen(
         SettingsSection(title = "Accessibility") {
             ToggleRow(
                 label = "High contrast",
-                subtitle = "Darker borders + stronger text contrast.",
+                subtitle = "Darker borders and stronger text contrast.",
                 value = settings.highContrast,
                 onChange = onHighContrastChange,
             )
             Spacer(Modifier.height(10.dp))
             ToggleRow(
                 label = "Haptic feedback",
-                subtitle = "Vibrate when Hank barges in or you interrupt.",
+                subtitle = "Vibrate when Hank barges in or when the demo flips into follow-up listening.",
                 value = settings.hapticFeedback,
                 onChange = onHapticChange,
             )
@@ -172,162 +120,25 @@ fun SettingsScreen(
         SettingsSection(title = "About") {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Version", color = AppColors.TextSecondary, fontSize = 13.sp)
-                Text("0.1 · beta", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("0.1 · demo", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Speech", color = AppColors.TextSecondary, fontSize = 13.sp)
-                Text(
-                    settings.speechRecognitionRoute.settingsLabel,
-                    color = AppColors.TextPrimary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Text("Shell", color = AppColors.TextSecondary, fontSize = 13.sp)
+                Text("Demo / Pipeline / Settings", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Model", color = AppColors.TextSecondary, fontSize = 13.sp)
+                Text("Vision model", color = AppColors.TextSecondary, fontSize = 13.sp)
                 Text("Gemini 3.1 flash lite", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Voice", color = AppColors.TextSecondary, fontSize = 13.sp)
+                Text("Voice model", color = AppColors.TextSecondary, fontSize = 13.sp)
                 Text("ElevenLabs flash v2.5", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Speech debug",
-                color = AppColors.TextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text =
-                    buildString {
-                        append("Active route: ")
-                        append(settings.speechRecognitionRoute.settingsLabel)
-                        append('\n')
-                        append("Last backend: ")
-                        append(speechDebug.backendLabel)
-                        if (speechDebug.modelId.isNotBlank()) {
-                            append(" · ")
-                            append(speechDebug.modelId)
-                        }
-                        append('\n')
-                        append("Last status: ")
-                        append(speechDebug.status)
-                        speechDebug.latencyMs?.let {
-                            append(" · ")
-                            append(it)
-                            append(" ms")
-                        }
-                        if (speechDebug.updatedAt > 0L) {
-                            append('\n')
-                            append("Updated: ")
-                            append(
-                                SimpleDateFormat("MMM d, HH:mm:ss", Locale.US)
-                                    .format(Date(speechDebug.updatedAt)),
-                            )
-                        }
-                        if (speechDebug.transcript.isNotBlank()) {
-                            append('\n')
-                            append("Last text: ")
-                            append(speechDebug.transcript.take(120))
-                            if (speechDebug.transcript.length > 120) append("...")
-                        }
-                    },
-                color = AppColors.TextSecondary,
-                fontSize = 11.sp,
-                lineHeight = 16.sp,
-            )
         }
 
         Spacer(Modifier.height(80.dp))
-    }
-}
-
-@Composable
-private fun SettingsSection(title: String, content: @Composable () -> Unit) {
-    Text(
-        text = title.uppercase(),
-        color = AppColors.TextMuted,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-    )
-    Spacer(Modifier.height(6.dp))
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(AppColors.Surface, shape = RoundedCornerShape(12.dp))
-                .padding(16.dp),
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun ToggleRow(label: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = AppColors.TextSecondary, fontSize = 11.sp)
-        }
-        Switch(
-            checked = value,
-            onCheckedChange = onChange,
-            colors =
-                SwitchDefaults.colors(
-                    checkedThumbColor = AppColors.AccentOn,
-                    checkedTrackColor = AppColors.Accent,
-                    uncheckedThumbColor = AppColors.Surface,
-                    uncheckedTrackColor = AppColors.Border,
-                ),
-        )
-    }
-}
-
-@Composable
-private fun SegmentedRow(
-    label: String,
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-) {
-    Text(label, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(6.dp))
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(AppColors.SurfaceAlt, shape = RoundedCornerShape(10.dp))
-                .padding(3.dp),
-    ) {
-        options.forEachIndexed { i, opt ->
-            val isSelected = i == selectedIndex
-            Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .background(
-                            if (isSelected) AppColors.Accent else AppColors.SurfaceAlt,
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .clickable { onSelect(i) }
-                        .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = opt,
-                    color = if (isSelected) AppColors.AccentOn else AppColors.TextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
     }
 }

@@ -29,6 +29,7 @@ data class StreamUiState(
     val isDemoCommentaryMode: Boolean = false,
     val spokenQuestion: String? = null,
     val lastGeminiResponse: String? = null,
+    val voiceStatusMessage: String? = null,
     val glassesAudioStatus: GlassesAudioManager.AudioStatus = GlassesAudioManager.AudioStatus.NONE,
     val chatMessages: List<ChatMessage> = emptyList(),
 )

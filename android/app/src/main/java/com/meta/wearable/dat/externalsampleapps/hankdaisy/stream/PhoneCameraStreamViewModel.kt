@@ -36,6 +36,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.meta.wearable.dat.camera.types.StreamSessionState
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppConfigStore
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.WorkDomain
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -194,7 +195,8 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
     private fun handleCameraFrame(image: ImageProxy) {
         try {
             val now = System.currentTimeMillis()
-            if (now - lastFrameAt < 90L) return
+            val minFrameIntervalMs = (1000L / currentSourceFps()).coerceAtLeast(33L)
+            if (now - lastFrameAt < minFrameIntervalMs) return
             lastFrameAt = now
             val bitmap = image.toPhoneBitmap() ?: return
             _uiState.update {
@@ -286,7 +288,7 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                             Log.w(TAG, "scene watcher observe failed", e)
                         }
                     }
-                    delay(300L)
+                    delay((1000L / currentModelSendFps()).coerceAtLeast(120L))
                 }
             }
     }
@@ -347,18 +349,34 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                                 else conversationHistory.toList(),
                             systemPromptOverride = systemPromptOverride,
                         )
-                    val cleaned = response.trim().lowercase()
+                    val preparedResponse =
+                        AssistantResponsePolicy.prepare(
+                            raw = response,
+                            mode =
+                                if (demoCommentaryMode) AssistantResponseMode.VISUAL_DEMO
+                                else AssistantResponseMode.CONVERSATION,
+                        )
+                    if (preparedResponse.wasSanitized) {
+                        Log.w(TAG, "Sanitized autonomous assistant response before speech/history")
+                    }
+                    if (preparedResponse.usedFallback) {
+                        Log.w(TAG, "Dropped autonomous assistant response after meta-term contamination")
+                        _uiState.update { it.copy(isAnalyzing = false) }
+                        return@launch
+                    }
+                    val safeResponse = preparedResponse.text
+                    val cleaned = safeResponse.trim().lowercase()
                     _uiState.update { it.copy(isAnalyzing = false) }
                     if (cleaned.contains("<quiet>") || cleaned == "quiet" || cleaned.length < 6) {
                         return@launch
                     }
                     if (!demoCommentaryMode) {
-                        conversationHistory.add(GeminiService.Turn("assistant", response))
+                        conversationHistory.add(GeminiService.Turn("assistant", safeResponse))
                         while (conversationHistory.size > 24) conversationHistory.removeAt(0)
                     }
-                    appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, response))
-                    _uiState.update { it.copy(lastGeminiResponse = response) }
-                    audio.speak(response)
+                    appendChatMessages(ChatMessage(ChatMessage.Role.ASSISTANT, safeResponse))
+                    _uiState.update { it.copy(lastGeminiResponse = safeResponse) }
+                    audio.speak(safeResponse)
                     lastTurnAt = System.currentTimeMillis()
                 } catch (e: Exception) {
                     Log.e(TAG, "autonomous observation failed", e)
@@ -375,15 +393,16 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
 
     private fun currentDemoCommentaryMode(): Boolean {
         return try {
-            val raw =
-                getApplication<Application>()
-                    .getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
-                    .getString("settings_json", null)
-            if (raw == null) false else JSONObject(raw).optBoolean("demoCommentaryMode", false)
+            AppConfigStore.current(getApplication()).general.demoCommentaryMode
         } catch (_: Exception) {
             false
         }
     }
+
+    private fun currentSourceFps(): Int = AppConfigStore.current(getApplication()).video.sourceFps
+
+    private fun currentModelSendFps(): Int =
+        AppConfigStore.current(getApplication()).video.modelSendFps.coerceIn(1, 10)
 
     private fun refreshActiveModes() {
         demoCommentaryMode = currentDemoCommentaryMode()
@@ -456,19 +475,48 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                 voiceCommand.state.collect { voiceState ->
                     when (voiceState) {
                         is VoiceCommandManager.VoiceState.Passive ->
-                            _uiState.update { it.copy(isListening = false, isWakeWordActive = true) }
+                            _uiState.update {
+                                it.copy(
+                                    isListening = false,
+                                    isWakeWordActive = true,
+                                    voiceStatusMessage = null,
+                                )
+                            }
                         is VoiceCommandManager.VoiceState.Listening ->
-                            _uiState.update { it.copy(isListening = true) }
+                            _uiState.update {
+                                it.copy(
+                                    isListening = true,
+                                    voiceStatusMessage = "Heard you — keep talking.",
+                                )
+                            }
                         is VoiceCommandManager.VoiceState.QuestionReady -> {
                             _uiState.update {
-                                it.copy(isListening = false, spokenQuestion = voiceState.text)
+                                it.copy(
+                                    isListening = false,
+                                    spokenQuestion = voiceState.text,
+                                    voiceStatusMessage = null,
+                                )
                             }
                             analyzeWithQuestion(voiceState.text)
                         }
-                        is VoiceCommandManager.VoiceState.Error ->
+                        is VoiceCommandManager.VoiceState.Error -> {
                             Log.w(TAG, "Voice error: ${voiceState.message}")
+                            _uiState.update {
+                                it.copy(
+                                    isListening = false,
+                                    isWakeWordActive = false,
+                                    voiceStatusMessage = voiceState.message,
+                                )
+                            }
+                        }
                         is VoiceCommandManager.VoiceState.Off ->
-                            _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+                            _uiState.update {
+                                it.copy(
+                                    isListening = false,
+                                    isWakeWordActive = false,
+                                    voiceStatusMessage = null,
+                                )
+                            }
                     }
                 }
             }
@@ -530,7 +578,13 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
 
     fun askHank() {
         if (_uiState.value.isListening || _uiState.value.isAnalyzing) return
-        _uiState.update { it.copy(lastGeminiResponse = null, spokenQuestion = null) }
+        _uiState.update {
+            it.copy(
+                lastGeminiResponse = null,
+                spokenQuestion = null,
+                voiceStatusMessage = "Listening for your question.",
+            )
+        }
         voiceCommand.startManualListen()
     }
 
@@ -548,7 +602,13 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
     fun cancelListening() {
         voiceCommand.stopContinuousListening()
         voiceJob?.cancel()
-        _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+        _uiState.update {
+            it.copy(
+                isListening = false,
+                isWakeWordActive = false,
+                voiceStatusMessage = null,
+            )
+        }
     }
 
     private fun analyzeWithQuestion(question: String) {
@@ -563,17 +623,26 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                 val historySnapshot = conversationHistory.toList()
                 val response = geminiService.analyzeFrame(frameCopy, question, historySnapshot)
                 frameCopy?.recycle()
+                val preparedResponse =
+                    AssistantResponsePolicy.prepare(
+                        raw = response,
+                        mode = AssistantResponseMode.CONVERSATION,
+                    )
+                if (preparedResponse.wasSanitized) {
+                    Log.w(TAG, "Sanitized assistant response before speech/history")
+                }
+                val safeResponse = preparedResponse.text
 
                 conversationHistory.add(GeminiService.Turn("user", question))
-                conversationHistory.add(GeminiService.Turn("assistant", response))
+                conversationHistory.add(GeminiService.Turn("assistant", safeResponse))
                 while (conversationHistory.size > 24) conversationHistory.removeAt(0)
                 appendChatMessages(
                     ChatMessage(ChatMessage.Role.USER, question),
-                    ChatMessage(ChatMessage.Role.ASSISTANT, response),
+                    ChatMessage(ChatMessage.Role.ASSISTANT, safeResponse),
                 )
 
-                _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = response) }
-                audio.speak(response)
+                _uiState.update { it.copy(isAnalyzing = false, lastGeminiResponse = safeResponse) }
+                audio.speak(safeResponse)
                 lastTurnAt = System.currentTimeMillis()
             }
     }
@@ -700,10 +769,7 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
             val app = getApplication<Application>()
             val hapticEnabled =
                 try {
-                    val raw =
-                        app.getSharedPreferences("hank_sessions_v1", Context.MODE_PRIVATE)
-                            .getString("settings_json", null)
-                    if (raw == null) true else JSONObject(raw).optBoolean("hapticFeedback", true)
+                    AppConfigStore.current(app).general.hapticFeedback
                 } catch (_: Exception) {
                     true
                 }

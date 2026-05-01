@@ -8,8 +8,6 @@
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.ui
 
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,10 +37,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -54,9 +50,7 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.BuildConfig
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.CaptureMode
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.SessionViewModel
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.ThemeMode
-import com.meta.wearable.dat.externalsampleapps.hankdaisy.stream.GeminiService
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables.WearablesViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,11 +64,7 @@ fun HankDaisyScaffold(
   val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val sessionVm: SessionViewModel = viewModel()
   val sessionState by sessionVm.uiState.collectAsStateWithLifecycle()
-  val appContext = LocalContext.current.applicationContext
-  val geminiService = remember(appContext) { GeminiService(appContext) }
-  val scope = rememberCoroutineScope()
-  val activity = LocalActivity.current as? ComponentActivity
-  val captureMode = sessionState.settings.captureMode
+  val captureMode = sessionState.config.demo.captureMode
 
   LaunchedEffect(uiState.recentError) {
     uiState.recentError?.let { errorMessage ->
@@ -93,7 +83,7 @@ fun HankDaisyScaffold(
     }
   }
 
-  // Direct lambda the Convos "+" button fires — avoids the streamRequested
+  // Direct lambda the demo entrypoint fires — avoids the streamRequested
   // indirection so the stream start is unconditional.
   val startGlassesStream: () -> Unit = {
     viewModel.navigateToStreaming(onRequestWearablesPermission)
@@ -101,7 +91,7 @@ fun HankDaisyScaffold(
 
   val systemDark = isSystemInDarkTheme()
   val basePalette =
-      when (sessionState.settings.themeMode) {
+      when (sessionState.config.general.themeMode) {
         ThemeMode.DARK -> DarkPalette
         ThemeMode.LIGHT -> LightPalette
         ThemeMode.SYSTEM -> if (systemDark) DarkPalette else LightPalette
@@ -110,7 +100,7 @@ fun HankDaisyScaffold(
   // primary text colour and darken the border so dividers + caption text
   // stand out for users who need the extra contrast.
   val palette =
-      if (sessionState.settings.highContrast) {
+      if (sessionState.config.general.highContrast) {
         basePalette.copy(
             TextSecondary = basePalette.TextPrimary,
             TextMuted = basePalette.TextPrimary.copy(alpha = 0.75f),
@@ -125,7 +115,7 @@ fun HankDaisyScaffold(
   val scaledDensity =
       Density(
           density = baseDensity.density,
-          fontScale = baseDensity.fontScale * sessionState.settings.textScale.factor,
+          fontScale = baseDensity.fontScale * sessionState.config.general.textScale.factor,
       )
 
   CompositionLocalProvider(
@@ -140,129 +130,24 @@ fun HankDaisyScaffold(
           uiState.isStreaming && captureMode == CaptureMode.GLASSES ->
               StreamScreen(
                   wearablesViewModel = viewModel,
-                  onSessionEnd = { sessionVm.saveStreamSession(it) },
               )
           uiState.isStreaming && captureMode == CaptureMode.PHONE_CAMERA ->
               PhoneCameraStreamScreen(
                   wearablesViewModel = viewModel,
-                  onSessionEnd = { sessionVm.saveStreamSession(it) },
-              )
-          sessionState.chatOnlyOpen ->
-              ChatOnlyScreen(
-                  onBack = { sessionVm.closeChatOnly() },
-                  onSessionEnd = { sessionVm.saveStreamSession(it) },
               )
           !uiState.isRegistered &&
               captureMode == CaptureMode.GLASSES &&
-              sessionState.currentTab != AppTab.SETTINGS ->
+              sessionState.currentTab == TopLevelTab.DEMO ->
               HomeScreen(
                   viewModel = viewModel,
-                  onOpenSettings = { sessionVm.selectTab(AppTab.SETTINGS) },
-              )
-          sessionState.profileOpen ->
-              ProfileScreen(
-                  profile = sessionState.userProfile,
-                  sessionCount = sessionState.sessions.size,
-                  onBack = { sessionVm.closeProfile() },
-                  onSave = { sessionVm.updateProfile(it) },
-              )
-          sessionState.newOrderSheetOpen ->
-              NewOrderScreen(
-                  workDomain = sessionState.settings.workDomain,
-                  onCancel = { sessionVm.closeNewOrderSheet() },
-                  onCreate = { order ->
-                    sessionVm.createOrder(order)
-                    sessionVm.closeNewOrderSheet()
-                    // Jump straight into the detail view — feels more
-                    // direct than bouncing back to the list after create.
-                    sessionVm.openOrder(order.id)
+                  onUsePhoneMode = {
+                    sessionVm.updateConfig(
+                        sessionState.config.copy(
+                            demo = sessionState.config.demo.copy(captureMode = CaptureMode.PHONE_CAMERA),
+                        ),
+                    )
                   },
               )
-          sessionState.viewingOrderId != null -> {
-            val order =
-                sessionState.orders.firstOrNull { it.id == sessionState.viewingOrderId }
-            if (order != null) {
-              val orderSessions =
-                  sessionState.sessions.filter { it.orderId == order.id }
-              val ctx = activity?.applicationContext
-              OrderDetailScreen(
-                  order = order,
-                  workDomain = sessionState.settings.workDomain,
-                  sessions = orderSessions,
-                  onBack = { sessionVm.closeOrderDetail() },
-                  onStartDiagnosis = {
-                    // Tag the next saved session to this order, then kick
-                    // off the glasses stream. When the stream ends we
-                    // land back here automatically because viewingOrderId
-                    // is still set.
-                    sessionVm.setActiveOrder(order.id)
-                    viewModel.navigateToStreaming(onRequestWearablesPermission)
-                  },
-                  onOpenSession = { sessionVm.openSession(it) },
-                  onUpdateOrder = { sessionVm.updateOrder(it) },
-                  onCloseOrder = { sessionVm.closeOrder(order.id) },
-                  onReopenOrder = { sessionVm.reopenOrder(order.id) },
-                  onDeleteOrder = {
-                    sessionVm.deleteOrder(order.id)
-                    sessionVm.closeOrderDetail()
-                  },
-                  onGenerateReport =
-                      if (ctx != null) {
-                        {
-                          scope.launch {
-                            OrderReportPdf.generateAndShare(
-                                context = ctx,
-                                order = order,
-                                sessions = orderSessions,
-                                workDomain = sessionState.settings.workDomain,
-                                gemini = geminiService,
-                            )
-                          }
-                        }
-                      } else null,
-              )
-            } else {
-              // Order deleted from under us — bail back to the tabs.
-              sessionVm.closeOrderDetail()
-              MainTabs(
-                  sessionVm = sessionVm,
-                  onStartStream = startGlassesStream,
-                  isStreamingNow = uiState.isStreaming,
-              )
-            }
-          }
-          sessionState.viewingSessionId != null -> {
-            val session =
-                sessionState.sessions.firstOrNull { it.id == sessionState.viewingSessionId }
-            if (session != null) {
-              val ctx = activity?.applicationContext
-              ChatHistoryScreen(
-                  title = session.title,
-                  messages = session.messages,
-                  onBack = { sessionVm.closeSession() },
-                  onSummariseAndExport =
-                      if (ctx != null) {
-                        {
-                          scope.launch {
-                            ChatSummaryPdf.summariseAndShare(
-                                context = ctx,
-                                session = session,
-                                workDomain = sessionState.settings.workDomain,
-                                gemini = geminiService,
-                            )
-                          }
-                        }
-                      } else null,
-              )
-            } else {
-              sessionVm.closeSession()
-              MainTabs(
-                  sessionVm = sessionVm,
-                  onStartStream = startGlassesStream,
-                  isStreamingNow = uiState.isStreaming,
-              )
-            }
-          }
           else ->
               MainTabs(
                   sessionVm = sessionVm,
@@ -319,7 +204,7 @@ fun HankDaisyScaffold(
   }
 }
 
-/** Tab host — chat list / tips / settings / profile — sharing a bottom nav. */
+/** Top-level shell: Demo, Pipeline, Settings. */
 @Composable
 private fun MainTabs(
     sessionVm: SessionViewModel,
@@ -327,48 +212,78 @@ private fun MainTabs(
     isStreamingNow: Boolean = false,
 ) {
   val state by sessionVm.uiState.collectAsStateWithLifecycle()
-  val selectedTab = AppTab.coerceToDemo(state.currentTab)
+  val selectedTab = state.currentTab
   Column(modifier = Modifier.fillMaxSize()) {
     Box(modifier = Modifier.weight(1f)) {
-      if (selectedTab == AppTab.CONVOS) {
-        ConvosScreen(
-            onNewSession = onStartStream,
-            workDomain = state.settings.workDomain,
-            captureMode = state.settings.captureMode,
-            isStreaming = isStreamingNow,
-        )
-      } else {
-        SettingsScreen(
-            settings = state.settings,
-            onCaptureModeChange = {
-              sessionVm.updateSettings(state.settings.copy(captureMode = it))
-            },
-            onSpeechRecognitionRouteChange = {
-              sessionVm.updateSettings(state.settings.copy(speechRecognitionRoute = it))
-            },
-            onWorkDomainChange = {
-              sessionVm.updateSettings(state.settings.copy(workDomain = it))
-            },
-            onDemoCommentaryModeChange = {
-              sessionVm.updateSettings(state.settings.copy(demoCommentaryMode = it))
-            },
-            onThemeChange = { sessionVm.updateSettings(state.settings.copy(themeMode = it)) },
-            onTextScaleChange = {
-              sessionVm.updateSettings(state.settings.copy(textScale = it))
-            },
-            onHighContrastChange = {
-              sessionVm.updateSettings(state.settings.copy(highContrast = it))
-            },
-            onHapticChange = {
-              sessionVm.updateSettings(state.settings.copy(hapticFeedback = it))
-            },
-        )
+      when (selectedTab) {
+        TopLevelTab.DEMO ->
+            DemoScreen(
+                config = state.config,
+                isStreaming = isStreamingNow,
+                onStartDemo = onStartStream,
+                onCaptureModeChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(
+                          demo = state.config.demo.copy(captureMode = it),
+                      ),
+                  )
+                },
+            )
+        TopLevelTab.PIPELINE ->
+            PipelineScreen(
+                config = state.config,
+                currentSection = state.pipelineSection,
+                onSectionChange = { sessionVm.selectPipelineSection(it) },
+                onConfigChange = { sessionVm.updateConfig(it) },
+            )
+        TopLevelTab.SETTINGS ->
+            SettingsScreen(
+                settings = state.config.general,
+                onWorkDomainChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(
+                          general = state.config.general.copy(workDomain = it),
+                      ),
+                  )
+                },
+                onDemoCommentaryModeChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(
+                          general = state.config.general.copy(demoCommentaryMode = it),
+                      ),
+                  )
+                },
+                onThemeChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(general = state.config.general.copy(themeMode = it)),
+                  )
+                },
+                onTextScaleChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(general = state.config.general.copy(textScale = it)),
+                  )
+                },
+                onHighContrastChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(
+                          general = state.config.general.copy(highContrast = it),
+                      ),
+                  )
+                },
+                onHapticChange = {
+                  sessionVm.updateConfig(
+                      state.config.copy(
+                          general = state.config.general.copy(hapticFeedback = it),
+                      ),
+                  )
+                },
+            )
       }
     }
     BottomNav(
         current = selectedTab,
-        tabs = AppTab.demoTabs,
-        onSelect = { sessionVm.selectTab(AppTab.coerceToDemo(it)) },
+        tabs = TopLevelTab.values().toList(),
+        onSelect = { sessionVm.selectTab(it) },
     )
   }
 }

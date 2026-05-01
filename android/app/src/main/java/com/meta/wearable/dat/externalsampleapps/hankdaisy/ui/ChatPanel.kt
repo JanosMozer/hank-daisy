@@ -80,8 +80,7 @@ fun ChatPanel(
             ) {
                 items(messages) { msg -> ChatTurn(msg, forOverlay = true) }
             }
-            // Small "Export" pill in the top-right corner so the user can
-            // send the session JSON to the bay UI's Import Session button.
+            // Small transcript export affordance for quick demo capture.
             if (onExport != null) {
                 Box(
                     modifier =

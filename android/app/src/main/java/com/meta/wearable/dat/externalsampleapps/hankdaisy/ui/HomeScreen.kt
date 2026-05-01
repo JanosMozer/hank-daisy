@@ -49,7 +49,7 @@ import com.meta.wearable.dat.externalsampleapps.hankdaisy.wearables.WearablesVie
 @Composable
 fun HomeScreen(
     viewModel: WearablesViewModel,
-    onOpenSettings: () -> Unit = {},
+    onUsePhoneMode: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
   val scrollState = rememberScrollState()
@@ -120,10 +120,10 @@ fun HomeScreen(
           },
       )
       Text(
-          text = "Need phone-only mode? Open Settings.",
+          text = "Need phone-only mode? Switch to phone demo.",
           color = AppColors.Accent,
           textAlign = TextAlign.Center,
-          modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenSettings),
+          modifier = Modifier.fillMaxWidth().clickable(onClick = onUsePhoneMode),
       )
     }
   }

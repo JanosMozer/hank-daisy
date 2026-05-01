@@ -74,8 +74,8 @@ fun StreamScreen(
   DisposableEffect(Unit) {
     streamViewModel.startStream()
     onDispose {
-      // Capture the conversation BEFORE stopStream() wipes it, so we can
-      // save it as a Session on the home screen.
+      // Capture the conversation before stopStream() wipes it so callers
+      // can keep or export a last-turn snapshot if they want one.
       val snapshot = streamViewModel.uiState.value.chatMessages
       if (snapshot.isNotEmpty()) onSessionEnd(snapshot)
       streamViewModel.stopStream()
@@ -126,6 +126,25 @@ fun StreamScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 140.dp),
     )
+
+    streamUiState.voiceStatusMessage?.let { voiceStatus ->
+      Box(
+          modifier =
+              Modifier
+                  .align(Alignment.BottomCenter)
+                  .padding(bottom = 182.dp, start = 16.dp, end = 16.dp)
+                  .background(Color.Black.copy(alpha = 0.78f), shape = RoundedCornerShape(12.dp))
+                  .padding(horizontal = 12.dp, vertical = 8.dp),
+      ) {
+        Text(
+            text = voiceStatus,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+      }
+    }
 
     // Glasses audio routing banner — warns the mechanic if the glasses
     // aren't paired as a Bluetooth headset (so I/O falls back to the phone).

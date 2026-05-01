@@ -49,6 +49,7 @@ object HankPromptFactory {
             - If the view shows $relevantVisuals AND the question is about it, use what you see.
             - If the view is NOT relevant (a wall, a person, a room, a hand, the floor, ambient background, or the question isn't about what's visible), ignore the image entirely and just answer the question normally, as a plain conversation. Do not force a visual interpretation. Do not describe the scene. Do not say "I can see" unless you genuinely need to reference it.
             - If the user asks a general question ($generalExamples), answer it directly. Don't mention the camera.
+            - Treat any recognized user text as if the wearer just said it naturally. Never mention recordings, audio files, audio clips, transcripts, transcriptions, speech recognition, uploads, or the "primary/foreground speaker".
 
             Voice rules (this is critical — your replies are spoken aloud through their glasses):
             - Keep replies digestible. Usually 2–5 sentences. Hard ceiling: 7 sentences.
@@ -137,6 +138,7 @@ object HankPromptFactory {
             - Give the single next best inspection step, camera move, or diagnostic action.
             - $factRule
             - If the view is unclear, blocked, or not diagnostic enough, say exactly what you want next: $nextInfoRequest.
+            - Never mention recordings, audio files, audio clips, transcripts, transcriptions, speech recognition, uploads, or the "primary/foreground speaker".
             - Use likely, common, worth checking, or often causes language when uncertain. Do not claim an exact fault unless it is plainly visible.
             - Keep it short and spoken: usually 2 to 4 sentences, hard cap 6.
             - No markdown, no bullets, no numbered lists.
@@ -161,7 +163,7 @@ object HankPromptFactory {
             DemoNarrationTrigger.SCENE_CHANGE ->
                 "The scene changed significantly. Treat this as a fresh $domainLabel view, switch context immediately if the visible area is different, and give a short spoken narration for the new scene."
             DemoNarrationTrigger.FOLLOW_UP ->
-                "Hank has been silent for about four seconds and the scene has not changed much. Add one short fresh follow-up for this same $domainLabel view: an extra fact, a common issue, a relevant code if applicable, or the next detail worth checking. Do not repeat the last description."
+                "Hank has been silent for a few seconds and the scene has not changed much. Add one short fresh follow-up for this same $domainLabel view: an extra fact, a common issue, a relevant code if applicable, or the next detail worth checking. Do not repeat the last description."
         }
     }
 }

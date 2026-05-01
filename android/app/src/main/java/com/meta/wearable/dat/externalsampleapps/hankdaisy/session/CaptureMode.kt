@@ -9,7 +9,6 @@
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.session
 
 import android.content.Context
-import org.json.JSONObject
 
 enum class CaptureMode {
     GLASSES,
@@ -24,19 +23,13 @@ enum class CaptureMode {
         fun current(context: Context): CaptureMode {
             val raw =
                 context.applicationContext
-                    .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getString(KEY_SETTINGS, null)
+                    .getSharedPreferences(AppConfigStore.PREFS, Context.MODE_PRIVATE)
+                    .getString(AppConfigStore.KEY_SETTINGS, null)
             return fromSettingsJson(raw)
         }
 
-        fun fromSettingsJson(raw: String?): CaptureMode {
-            if (raw.isNullOrBlank()) return GLASSES
-            return try {
-                fromStored(JSONObject(raw).optString(KEY_CAPTURE_MODE, GLASSES.name))
-            } catch (_: Exception) {
-                GLASSES
-            }
-        }
+        fun fromSettingsJson(raw: String?): CaptureMode =
+            AppConfigStore.fromSettingsJson(raw).demo.captureMode
 
         fun fromStored(raw: String?): CaptureMode =
             entries.firstOrNull { it.name == raw } ?: GLASSES

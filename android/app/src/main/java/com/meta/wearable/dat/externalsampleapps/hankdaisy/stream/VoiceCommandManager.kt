@@ -11,9 +11,15 @@ package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioManager
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,6 +27,11 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppConfig
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppConfigStore
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.EchoCancellationMode
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.NoiseSuppressionMode
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.PreferredMicDevice
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.SpeechRecognitionRoute
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -77,7 +88,7 @@ class VoiceCommandManager(private val context: Context) {
         // Wake word variations kept for prefix-stripping only — they're no
         // longer required to trigger Hank, just filtered out if the user
         // happens to say them out of habit.
-        private val WAKE_WORDS = listOf("hey hank", "hank", "hey hunk", "a hank", "hey frank")
+        private val DEFAULT_WAKE_WORDS = listOf("hey hank", "hank", "hey hunk", "a hank", "hey frank")
     }
 
     sealed interface VoiceState {
@@ -100,13 +111,32 @@ class VoiceCommandManager(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var captureThread: Thread? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val openRouterTranscriber = OpenRouterSpeechTranscriber()
+    private val openRouterTranscriber = OpenRouterSpeechTranscriber(context)
+    private val prefs =
+        context.applicationContext.getSharedPreferences(
+            AppConfigStore.PREFS,
+            Context.MODE_PRIVATE,
+        )
     private var isRunning = false
     private var isFollowUp = false  // true when we detected wake word, now waiting for question
     private var isMuted = false     // pause listening while Hank himself is talking
     private var recognitionCycleStartedAt: Long = 0L
     @Volatile private var audioCaptureActive = false
     @Volatile private var lastCallbackAt: Long = 0L
+    @Volatile private var lastQuestionNorm: String = ""
+    @Volatile private var lastQuestionAt: Long = 0L
+
+    private val settingsListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == AppConfigStore.KEY_SETTINGS) {
+                handler.post {
+                    if ((isRunning || isFollowUp) && !isMuted) {
+                        Log.d(TAG, "Voice pipeline settings changed — restarting recognizer")
+                        restartRecognizer()
+                    }
+                }
+            }
+        }
 
     /** Periodically verify the recognizer is actually alive. Google's
      * SpeechRecognizer is known to silently die after long runs or certain
@@ -128,6 +158,10 @@ class VoiceCommandManager(private val context: Context) {
                 handler.postDelayed(this, WATCHDOG_INTERVAL_MS)
             }
         }
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(settingsListener)
+    }
 
     /**
      * Start always-on passive listening for "Hey Hank".
@@ -226,6 +260,9 @@ class VoiceCommandManager(private val context: Context) {
 
     fun shutdown() {
         stopContinuousListening()
+        try {
+            prefs.unregisterOnSharedPreferenceChangeListener(settingsListener)
+        } catch (_: Exception) {}
     }
 
     // ---- Internal ----
@@ -439,7 +476,7 @@ class VoiceCommandManager(private val context: Context) {
                 val text = partials?.firstOrNull()?.lowercase() ?: return
                 if (containsWakeWord(text)) {
                     Log.d(TAG, "Wake word detected in partial: $text")
-                    // Don't act yet — wait for full results to get the complete utterance
+                    _state.value = VoiceState.Listening
                 }
             }
         }
@@ -450,10 +487,16 @@ class VoiceCommandManager(private val context: Context) {
     }
 
     private fun handleSpeechResults(matches: List<String>?) {
-        val text = matches?.firstOrNull()?.trim() ?: ""
+        val rawText = matches?.firstOrNull()?.trim() ?: ""
+        val text = SpeechTurnSanitizer.sanitizeRecognizedSpeech(rawText)
+        if (rawText != text && rawText.isNotBlank()) {
+            Log.d(TAG, "Sanitized speech turn: \"$rawText\" -> \"$text\"")
+        }
         Log.d(TAG, "Result: \"$text\" (followUp=$isFollowUp)")
+        val config = currentConfig()
+        val minQueryLength = config.audio.intent.minQueryLength.coerceIn(1, 8)
 
-        if (text.length < MIN_QUERY_LENGTH) {
+        if (text.length < minQueryLength) {
             // Too short to be a real question (likely ambient noise, a cough,
             // an "uh", etc.). Don't bother Hank.
             if (isFollowUp) {
@@ -467,7 +510,7 @@ class VoiceCommandManager(private val context: Context) {
         // Strip a leading "Hey Hank" if present (user may still say it out of
         // habit) but don't require it.
         val lowerText = text.lowercase()
-        val wakeWord = WAKE_WORDS.find { lowerText.startsWith(it) || lowerText.contains(it) }
+        val wakeWord = wakeWords().find { lowerText.startsWith(it) || lowerText.contains(it) }
         val question =
             if (wakeWord != null) {
                 val idx = lowerText.indexOf(wakeWord) + wakeWord.length
@@ -475,7 +518,7 @@ class VoiceCommandManager(private val context: Context) {
             } else {
                 text
             }
-        if (question.length < MIN_QUERY_LENGTH) {
+        if (question.length < minQueryLength) {
             // They said only the wake word with no follow-on question.
             // Treat as a "yes?" prompt — switch to focused follow-up listen.
             isFollowUp = true
@@ -483,13 +526,31 @@ class VoiceCommandManager(private val context: Context) {
             restartRecognizer()
             return
         }
+        val duplicateWindowMs = config.audio.intent.duplicateWindowMs.coerceIn(0L, 10_000L)
+        val now = System.currentTimeMillis()
+        val normalized = normalizeQuestion(question)
+        if (
+            duplicateWindowMs > 0L &&
+                normalized.isNotBlank() &&
+                normalized == lastQuestionNorm &&
+                now - lastQuestionAt <= duplicateWindowMs
+        ) {
+            Log.d(TAG, "Suppressing duplicate speech turn: \"$question\"")
+            if (isFollowUp) {
+                isFollowUp = false
+            }
+            scheduleRestart()
+            return
+        }
+        lastQuestionNorm = normalized
+        lastQuestionAt = now
         Log.d(TAG, "Question captured: $question")
         _state.value = VoiceState.QuestionReady(question)
     }
 
     private fun containsWakeWord(text: String): Boolean {
         val lower = text.lowercase()
-        return WAKE_WORDS.any { lower.contains(it) }
+        return wakeWords().any { lower.contains(it) }
     }
 
     private fun scheduleRestart() {
@@ -513,7 +574,19 @@ class VoiceCommandManager(private val context: Context) {
         recognizer = null
     }
 
-    private fun currentRoute(): SpeechRecognitionRoute = SpeechRecognitionRoute.current(context)
+    private fun currentConfig(): AppConfig = AppConfigStore.current(context)
+
+    private fun currentRoute(): SpeechRecognitionRoute = currentConfig().audio.transcription.route
+
+    private fun wakeWords(): List<String> {
+        val wakeWord = currentConfig().audio.wakeWord
+        if (!wakeWord.enabled) return emptyList()
+        val custom = wakeWord.phrase.trim().lowercase()
+        return if (custom.isBlank() || custom == "hey hank") DEFAULT_WAKE_WORDS else listOf(custom)
+    }
+
+    private fun normalizeQuestion(text: String): String =
+        text.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
 
     private fun destroyOpenRouterRecognizer() {
         audioCaptureActive = false
@@ -530,9 +603,11 @@ class VoiceCommandManager(private val context: Context) {
 
     @SuppressLint("MissingPermission") // RECORD_AUDIO is enforced at request time in MainActivity
     private fun captureUtteranceWav(): ByteArray? {
+        val config = currentConfig()
+        val sampleRate = config.audio.capture.sampleRateHz.coerceIn(8_000, 48_000)
         val minBuffer =
             AudioRecord.getMinBufferSize(
-                AUDIO_SAMPLE_RATE,
+                sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
             )
@@ -544,7 +619,7 @@ class VoiceCommandManager(private val context: Context) {
         val recorder =
             AudioRecord(
                 MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                AUDIO_SAMPLE_RATE,
+                sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
                 max(minBuffer * 2, 4096),
@@ -556,8 +631,10 @@ class VoiceCommandManager(private val context: Context) {
         }
 
         audioRecord = recorder
+        applyPreferredInputDevice(recorder, config)
+        val audioEffects = attachAudioEffects(recorder, config)
         val buffer = ShortArray(1024)
-        val maxPrerollBytes = (AUDIO_SAMPLE_RATE * 2 * AUDIO_PREROLL_MS) / 1000
+        val maxPrerollBytes = (sampleRate * 2 * AUDIO_PREROLL_MS) / 1000
         val preroll = ArrayDeque<ByteArray>()
         var prerollBytes = 0
         val speech = ByteArrayOutputStream()
@@ -569,6 +646,8 @@ class VoiceCommandManager(private val context: Context) {
         var belowEndMs = 0L
         var noiseFloor = 250.0
         var noiseSamples = 0
+        val threshold = config.audio.vad.threshold.coerceIn(0.05f, 1.0f).toDouble()
+        val minSpeechMs = config.audio.vad.minSpeechMs.coerceIn(80L, 2_000L)
 
         try {
             recorder.startRecording()
@@ -580,7 +659,7 @@ class VoiceCommandManager(private val context: Context) {
                     continue
                 }
 
-                val chunkMs = (1000L * read) / AUDIO_SAMPLE_RATE
+                val chunkMs = (1000L * read) / sampleRate
                 val pcmBytes = shortsToBytes(buffer, read)
                 val rms = computeRms(buffer, read)
 
@@ -589,8 +668,16 @@ class VoiceCommandManager(private val context: Context) {
                     noiseSamples += 1
                 }
 
-                val startThreshold = max(AUDIO_MIN_START_THRESHOLD, noiseFloor * 2.8)
-                val endThreshold = max(AUDIO_MIN_END_THRESHOLD, noiseFloor * 1.5)
+                val startThreshold =
+                    max(
+                        AUDIO_MIN_START_THRESHOLD * (0.55 + threshold),
+                        noiseFloor * (1.15 + threshold * 2.5),
+                    )
+                val endThreshold =
+                    max(
+                        AUDIO_MIN_END_THRESHOLD * (0.45 + threshold),
+                        noiseFloor * (1.0 + threshold * 1.3),
+                    )
 
                 if (!speechStarted) {
                     preroll.addLast(pcmBytes)
@@ -608,10 +695,15 @@ class VoiceCommandManager(private val context: Context) {
 
                     if (aboveStartMs >= AUDIO_START_HOLD_MS) {
                         speechStarted = true
+                        handler.post {
+                            if (!isMuted && (isRunning || isFollowUp)) {
+                                _state.value = VoiceState.Listening
+                            }
+                        }
                         for (bytes in preroll) {
                             speech.write(bytes)
                         }
-                        speechMs = ((speech.size() / 2L) * 1000L) / AUDIO_SAMPLE_RATE
+                        speechMs = ((speech.size() / 2L) * 1000L) / sampleRate
                         preroll.clear()
                         prerollBytes = 0
                         belowEndMs = 0L
@@ -634,7 +726,7 @@ class VoiceCommandManager(private val context: Context) {
                 }
 
                 if (speechMs >= AUDIO_MAX_UTTERANCE_MS ||
-                    (speechMs >= AUDIO_MIN_SPEECH_MS && belowEndMs >= AUDIO_END_HOLD_MS)
+                    (speechMs >= minSpeechMs && belowEndMs >= AUDIO_END_HOLD_MS)
                 ) {
                     break
                 }
@@ -651,6 +743,7 @@ class VoiceCommandManager(private val context: Context) {
             try {
                 recorder.release()
             } catch (_: Exception) {}
+            audioEffects.release()
             if (audioRecord === recorder) {
                 audioRecord = null
             }
@@ -658,7 +751,7 @@ class VoiceCommandManager(private val context: Context) {
 
         val pcm = speech.toByteArray()
         if (!speechStarted || pcm.isEmpty()) return null
-        return pcm16ToWav(pcm)
+        return pcm16ToWav(pcm, sampleRate)
     }
 
     private fun shortsToBytes(buffer: ShortArray, count: Int): ByteArray {
@@ -670,9 +763,9 @@ class VoiceCommandManager(private val context: Context) {
         return bytes
     }
 
-    private fun pcm16ToWav(pcm: ByteArray): ByteArray {
+    private fun pcm16ToWav(pcm: ByteArray, sampleRate: Int): ByteArray {
         val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
-        val byteRate = AUDIO_SAMPLE_RATE * 2
+        val byteRate = sampleRate * 2
         header.put("RIFF".toByteArray(Charsets.US_ASCII))
         header.putInt(36 + pcm.size)
         header.put("WAVE".toByteArray(Charsets.US_ASCII))
@@ -680,13 +773,94 @@ class VoiceCommandManager(private val context: Context) {
         header.putInt(16)
         header.putShort(1)
         header.putShort(1)
-        header.putInt(AUDIO_SAMPLE_RATE)
+        header.putInt(sampleRate)
         header.putInt(byteRate)
         header.putShort(2)
         header.putShort(16)
         header.put("data".toByteArray(Charsets.US_ASCII))
         header.putInt(pcm.size)
         return header.array() + pcm
+    }
+
+    private data class CaptureAudioEffects(
+        val echoCanceler: AcousticEchoCanceler?,
+        val noiseSuppressor: NoiseSuppressor?,
+        val automaticGainControl: AutomaticGainControl?,
+    ) {
+        fun release() {
+            try {
+                echoCanceler?.release()
+            } catch (_: Exception) {}
+            try {
+                noiseSuppressor?.release()
+            } catch (_: Exception) {}
+            try {
+                automaticGainControl?.release()
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun attachAudioEffects(recorder: AudioRecord, config: AppConfig): CaptureAudioEffects {
+        val sessionId = recorder.audioSessionId
+        val aec =
+            if (
+                config.audio.enhancement.echoCancellation == EchoCancellationMode.SYSTEM &&
+                    AcousticEchoCanceler.isAvailable()
+            ) {
+                AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true }
+            } else {
+                null
+            }
+        val ns =
+            if (
+                config.audio.enhancement.noiseSuppression == NoiseSuppressionMode.SYSTEM &&
+                    NoiseSuppressor.isAvailable()
+            ) {
+                NoiseSuppressor.create(sessionId)?.also { it.enabled = true }
+            } else {
+                null
+            }
+        val agc =
+            if (config.audio.enhancement.automaticGainControl && AutomaticGainControl.isAvailable()) {
+                AutomaticGainControl.create(sessionId)?.also { it.enabled = true }
+            } else {
+                null
+            }
+        return CaptureAudioEffects(
+            echoCanceler = aec,
+            noiseSuppressor = ns,
+            automaticGainControl = agc,
+        )
+    }
+
+    private fun applyPreferredInputDevice(recorder: AudioRecord, config: AppConfig) {
+        val preference = config.audio.capture.preferredDevice
+        if (preference == PreferredMicDevice.SYSTEM_DEFAULT) return
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        val matchingDevice =
+            audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { device ->
+                when (preference) {
+                    PreferredMicDevice.SYSTEM_DEFAULT -> true
+                    PreferredMicDevice.BUILT_IN_MIC ->
+                        device.type == AudioDeviceInfo.TYPE_BUILTIN_MIC
+                    PreferredMicDevice.WIRED_HEADSET ->
+                        device.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                            device.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                    PreferredMicDevice.USB_MIC ->
+                        device.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                            device.type == AudioDeviceInfo.TYPE_USB_HEADSET
+                    PreferredMicDevice.BLUETOOTH_MIC ->
+                        device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                            device.type == AudioDeviceInfo.TYPE_BLE_HEADSET
+                }
+            }
+        if (matchingDevice != null) {
+            try {
+                recorder.preferredDevice = matchingDevice
+            } catch (_: Exception) {
+                // best effort only
+            }
+        }
     }
 
     private fun computeRms(buffer: ShortArray, count: Int): Double {

@@ -9,7 +9,6 @@
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.session
 
 import android.content.Context
-import org.json.JSONObject
 
 enum class WorkDomain(
     val settingsLabel: String,
@@ -164,34 +163,15 @@ enum class WorkDomain(
         fun current(context: Context): WorkDomain {
             val raw =
                 context.applicationContext
-                    .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getString(KEY_SETTINGS, null)
+                    .getSharedPreferences(AppConfigStore.PREFS, Context.MODE_PRIVATE)
+                    .getString(AppConfigStore.KEY_SETTINGS, null)
             return fromSettingsJson(raw)
         }
 
-        fun fromSettingsJson(raw: String?): WorkDomain {
-            if (raw.isNullOrBlank()) return CAR
-            return try {
-                fromStored(JSONObject(raw).optString(KEY_WORK_DOMAIN, CAR.name))
-            } catch (_: Exception) {
-                CAR
-            }
-        }
+        fun fromSettingsJson(raw: String?): WorkDomain =
+            AppConfigStore.fromSettingsJson(raw).general.workDomain
 
         fun fromStored(raw: String?): WorkDomain =
             entries.firstOrNull { it.name == raw } ?: CAR
     }
-}
-
-fun RepairOrder.displayName(workDomain: WorkDomain): String {
-    val parts =
-        listOfNotNull(
-            vehicleYear.ifBlank { null },
-            vehicleMake.ifBlank { null },
-            vehicleModel.ifBlank { null },
-        )
-    if (parts.isNotEmpty()) return parts.joinToString(" ")
-    if (vehicleVin.isNotBlank()) return "${workDomain.primaryIdLabel}: $vehicleVin"
-    if (licensePlate.isNotBlank()) return "${workDomain.secondaryIdLabel}: $licensePlate"
-    return workDomain.unknownSubjectLabel
 }

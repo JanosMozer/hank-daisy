@@ -8,9 +8,12 @@
 
 package com.meta.wearable.dat.externalsampleapps.hankdaisy.stream
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
 import com.meta.wearable.dat.externalsampleapps.hankdaisy.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.AppConfigStore
+import com.meta.wearable.dat.externalsampleapps.hankdaisy.session.RemoteSpeechModel
 import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -25,7 +28,9 @@ import org.json.JSONObject
  * but implemented over OpenRouter's audio-input chat API so it fits the same
  * API key and transport the rest of the app already uses.
  */
-class OpenRouterSpeechTranscriber {
+class OpenRouterSpeechTranscriber(
+    private val context: Context,
+) {
 
     data class TranscriptionResult(
         val status: Status,
@@ -44,15 +49,8 @@ class OpenRouterSpeechTranscriber {
     companion object {
         private const val TAG = "HankDaisy:OpenRouterSTT"
         private const val API_URL = "https://openrouter.ai/api/v1/chat/completions"
-        // Preferred candidate: OpenAI's current diarization-capable STT model.
-        // If OpenRouter/provider routing rejects it on chat/completions, we
-        // fall back to GPT Audio, which OpenRouter documents clearly for audio
-        // input on the chat endpoint.
-        private val MODELS =
-            listOf(
-                "openai/gpt-4o-transcribe-diarize",
-                "openai/gpt-audio",
-            )
+        private const val DEFAULT_MODEL = "openai/gpt-4o-transcribe-diarize"
+        private const val FALLBACK_MODEL = "openai/gpt-audio"
 
         private const val TRANSCRIPTION_PROMPT =
             """
@@ -60,6 +58,7 @@ class OpenRouterSpeechTranscriber {
             Ignore background music, radio, TV, shop noise, tool noise, and side conversations.
             If multiple people speak, keep only the dominant foreground speaker.
             If there is no clear foreground utterance for the assistant, return exactly <no-speech>.
+            Return only the spoken words. Never mention audio, transcript, transcription, speaker, recording, file, or clip.
             Return plain text only. No labels, no commentary, no quotes.
             """
     }
@@ -81,7 +80,7 @@ class OpenRouterSpeechTranscriber {
             return TranscriptionResult(
                 status = TranscriptionResult.Status.ERROR,
                 text = null,
-                modelId = MODELS.first(),
+                modelId = configuredModels().first(),
                 latencyMs = 0,
                 message = "OpenRouter API key not configured or audio clip empty",
             )
@@ -91,9 +90,9 @@ class OpenRouterSpeechTranscriber {
         return try {
             val audioData = Base64.encodeToString(wavBytes, Base64.NO_WRAP)
             var lastError = "Unknown OpenRouter STT failure"
-            var lastModelId = MODELS.first()
+            var lastModelId = configuredModels().first()
 
-            for (modelId in MODELS) {
+            for (modelId in configuredModels()) {
                 lastModelId = modelId
                 val result = transcribeWithModel(audioData, modelId, startedAt)
                 when (result.status) {
@@ -118,10 +117,18 @@ class OpenRouterSpeechTranscriber {
             TranscriptionResult(
                 status = TranscriptionResult.Status.ERROR,
                 text = null,
-                modelId = MODELS.first(),
+                modelId = configuredModels().first(),
                 latencyMs = System.currentTimeMillis() - startedAt,
                 message = e.message ?: "Unexpected OpenRouter STT failure",
             )
+        }
+    }
+
+    private fun configuredModels(): List<String> {
+        return when (AppConfigStore.current(context).audio.transcription.remoteModel) {
+            RemoteSpeechModel.AUTO -> listOf(DEFAULT_MODEL, FALLBACK_MODEL)
+            RemoteSpeechModel.GPT_4O_TRANSCRIBE_DIARIZE -> listOf(DEFAULT_MODEL, FALLBACK_MODEL)
+            RemoteSpeechModel.GPT_AUDIO -> listOf(FALLBACK_MODEL)
         }
     }
 
@@ -195,7 +202,7 @@ class OpenRouterSpeechTranscriber {
                     message = "HTTP ${response.code}",
                 )
             }
-            val text = extractText(body)?.trim().orEmpty()
+            val text = normalizeTranscript(extractText(body).orEmpty())
             return when {
                 text.isBlank() ||
                     text.equals("<no-speech>", ignoreCase = true) ||
@@ -246,5 +253,9 @@ class OpenRouterSpeechTranscriber {
             }
             else -> null
         }
+    }
+
+    private fun normalizeTranscript(raw: String): String {
+        return SpeechTurnSanitizer.sanitizeRecognizedSpeech(raw)
     }
 }
