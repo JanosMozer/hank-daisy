@@ -33,7 +33,7 @@ enum class DomainMode(val label: String) {
 }
 
 enum class HankMode(val label: String) {
-    INTERACTIVE("Interactive"),
+    INTERACTIVE("On-demand"),
     READ_ONLY("Read-only"),
 }
 

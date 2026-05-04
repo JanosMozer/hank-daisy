@@ -103,9 +103,9 @@ fun PhoneCameraStreamScreen(
                 title = "Phone camera",
                 body =
                     if (streamUiState.hankMode == HankMode.READ_ONLY) {
-                        "Using the phone camera with hands-free commentary mode."
+                        "Using the phone camera with automatic commentary turned on."
                     } else {
-                        "Using the phone camera with interactive Hank replies."
+                        "Using the phone camera in quiet mode until you explicitly ask Hank something."
                     },
             )
             if (!streamUiState.pendingReadOnlyContext.isNullOrBlank()) {
@@ -135,7 +135,7 @@ fun PhoneCameraStreamScreen(
             isSpeaking = streamUiState.isHankSpeaking,
             readyLabel =
                 if (streamUiState.hankMode == HankMode.READ_ONLY) "Watching scene"
-                else "Hank's listening",
+                else "Quiet capture",
             modifier =
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -161,7 +161,7 @@ fun PhoneCameraStreamScreen(
             )
 
             SwitchButton(
-                label = if (streamUiState.hankMode == HankMode.READ_ONLY) "Interactive" else "Read-only",
+                label = if (streamUiState.hankMode == HankMode.READ_ONLY) "Mute Hank" else "Start commentary",
                 onClick = {
                     val nextMode =
                         if (streamUiState.hankMode == HankMode.READ_ONLY) HankMode.INTERACTIVE

@@ -99,11 +99,9 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
     private val sceneWatcher =
         SceneChangeWatcher(
             onSettledAfterMotion = {
-                viewModelScope.launch {
-                    if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+                if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+                    viewModelScope.launch {
                         performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.SCENE_CHANGE)
-                    } else {
-                        autonomousObservation()
                     }
                 }
             },
@@ -130,15 +128,8 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
         bindCamera()
         observeAudioStatus()
         observeTtsSpeaking()
-        startWakeWordListening()
-        startSceneWatcher()
-        if (_uiState.value.hankMode == HankMode.READ_ONLY) {
-            scheduleReadOnlyLoop()
-            viewModelScope.launch {
-                delay(1_000L)
-                performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
-            }
-        }
+        observeVoiceCommands()
+        applyHankMode(_uiState.value.hankMode, triggerInitialCommentary = true)
     }
 
     fun stopStream() {
@@ -187,7 +178,6 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
 
     fun cancelListening() {
         voiceCommand.stopContinuousListening()
-        voiceJob?.cancel()
         _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
     }
 
@@ -199,15 +189,7 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
 
     fun setHankMode(mode: HankMode) {
         _uiState.update { it.copy(hankMode = mode) }
-        if (mode == HankMode.READ_ONLY) {
-            scheduleReadOnlyLoop()
-            viewModelScope.launch {
-                performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
-            }
-        } else {
-            readOnlyJob?.cancel()
-            readOnlyJob = null
-        }
+        applyHankMode(mode, triggerInitialCommentary = mode == HankMode.READ_ONLY)
     }
 
     fun capturePhoto() {
@@ -365,16 +347,12 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                         }
                     } else {
                         bargeInDetector.stop()
-                        if (_uiState.value.hankMode == HankMode.INTERACTIVE) {
-                            voiceCommand.startConversationFollowUp()
-                        }
                     }
                 }
             }
     }
 
-    private fun startWakeWordListening() {
-        voiceCommand.startContinuousListening()
+    private fun observeVoiceCommands() {
         voiceJob?.cancel()
         voiceJob =
             viewModelScope.launch {
@@ -403,6 +381,42 @@ class PhoneCameraStreamViewModel(application: Application) : AndroidViewModel(ap
                     }
                 }
             }
+    }
+
+    private fun applyHankMode(mode: HankMode, triggerInitialCommentary: Boolean) {
+        if (mode == HankMode.READ_ONLY) {
+            startSceneWatcher()
+            voiceCommand.startContinuousListening()
+            scheduleReadOnlyLoop()
+            if (triggerInitialCommentary) {
+                viewModelScope.launch {
+                    delay(1_000L)
+                    performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
+                }
+            }
+        } else {
+            disableAutomaticCommentary(stopSpeaking = true)
+        }
+    }
+
+    private fun disableAutomaticCommentary(stopSpeaking: Boolean) {
+        readOnlyJob?.cancel()
+        readOnlyJob = null
+        sceneJob?.cancel()
+        sceneJob = null
+        sceneWatcher.reset()
+        pendingReadOnlyNotes.clear()
+        voiceCommand.stopContinuousListening()
+        if (stopSpeaking) {
+            audio.stopSpeaking()
+        }
+        _uiState.update {
+            it.copy(
+                isListening = false,
+                isWakeWordActive = false,
+                pendingReadOnlyContext = null,
+            )
+        }
     }
 
     private fun startSceneWatcher() {

@@ -135,11 +135,9 @@ class StreamViewModel(
   private val sceneWatcher =
       SceneChangeWatcher(
           onSettledAfterMotion = {
-            viewModelScope.launch {
-              if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+            if (_uiState.value.hankMode == HankMode.READ_ONLY) {
+              viewModelScope.launch {
                 performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.SCENE_CHANGE)
-              } else {
-                autonomousObservation()
               }
             }
           },
@@ -264,15 +262,8 @@ class StreamViewModel(
     glassesAudio.enableGlassesMic()
     observeGlassesAudio()
     observeTtsSpeaking()
-    startWakeWordListening()
-    startSceneWatcher()
-    if (_uiState.value.hankMode == HankMode.READ_ONLY) {
-      scheduleReadOnlyLoop()
-      viewModelScope.launch {
-        delay(1_000L)
-        performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
-      }
-    }
+    observeVoiceCommands()
+    applyHankMode(_uiState.value.hankMode, triggerInitialCommentary = true)
     startStreamInternal()
   }
 
@@ -385,9 +376,6 @@ class StreamViewModel(
               }
             } else {
               bargeInDetector.stop()
-              if (_uiState.value.hankMode == HankMode.INTERACTIVE) {
-                voiceCommand.startConversationFollowUp()
-              }
             }
           }
         }
@@ -610,13 +598,9 @@ class StreamViewModel(
     _uiState.update { it.copy(isShareDialogVisible = false) }
   }
 
-  /**
-   * Start always-on "Hey Hank" listening.
-   * Called automatically when stream starts.
-   */
-  private fun startWakeWordListening() {
-    voiceCommand.startContinuousListening()
-
+  /** Observe voice-command state so manual Ask Hank and commentary mode share
+   * the same speech pipeline without forcing background listening on startup. */
+  private fun observeVoiceCommands() {
     voiceJob?.cancel()
     voiceJob = viewModelScope.launch {
       voiceCommand.state.collect { voiceState ->
@@ -663,15 +647,7 @@ class StreamViewModel(
 
   fun setHankMode(mode: HankMode) {
     _uiState.update { it.copy(hankMode = mode) }
-    if (mode == HankMode.READ_ONLY) {
-      scheduleReadOnlyLoop()
-      viewModelScope.launch {
-        performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
-      }
-    } else {
-      readOnlyJob?.cancel()
-      readOnlyJob = null
-    }
+    applyHankMode(mode, triggerInitialCommentary = mode == HankMode.READ_ONLY)
   }
 
   /** Append messages to the chat panel UI state, capped at 100 to stay light.
@@ -1082,8 +1058,43 @@ class StreamViewModel(
 
   fun cancelListening() {
     voiceCommand.stopContinuousListening()
-    voiceJob?.cancel()
     _uiState.update { it.copy(isListening = false, isWakeWordActive = false) }
+  }
+
+  private fun applyHankMode(mode: HankMode, triggerInitialCommentary: Boolean) {
+    if (mode == HankMode.READ_ONLY) {
+      startSceneWatcher()
+      voiceCommand.startContinuousListening()
+      scheduleReadOnlyLoop()
+      if (triggerInitialCommentary) {
+        viewModelScope.launch {
+          delay(1_000L)
+          performReadOnlyCommentary(HankPromptFactory.CommentaryTrigger.MANUAL_START)
+        }
+      }
+    } else {
+      disableAutomaticCommentary(stopSpeaking = true)
+    }
+  }
+
+  private fun disableAutomaticCommentary(stopSpeaking: Boolean) {
+    readOnlyJob?.cancel()
+    readOnlyJob = null
+    sceneJob?.cancel()
+    sceneJob = null
+    sceneWatcher.reset()
+    pendingReadOnlyNotes.clear()
+    voiceCommand.stopContinuousListening()
+    if (stopSpeaking) {
+      glassesAudio.stopSpeaking()
+    }
+    _uiState.update {
+      it.copy(
+          isListening = false,
+          isWakeWordActive = false,
+          pendingReadOnlyContext = null,
+      )
+    }
   }
 
   private fun scheduleReadOnlyLoop() {

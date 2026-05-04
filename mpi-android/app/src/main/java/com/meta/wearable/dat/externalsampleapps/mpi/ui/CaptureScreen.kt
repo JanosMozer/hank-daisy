@@ -148,7 +148,7 @@ fun CaptureScreen(
                     modifier = Modifier.weight(1f),
                 )
                 SwitchButton(
-                    label = "Start chat",
+                    label = "Start capture",
                     onClick = onStartCapture,
                     enabled = glassesReady,
                     modifier = Modifier.weight(1f),

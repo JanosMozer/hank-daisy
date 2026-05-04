@@ -52,11 +52,11 @@ fun TipsScreen(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(18.dp))
 
         Tip(
-            title = "Just start talking",
+            title = "Hank starts quiet",
             body =
-                "No wake word needed. Once a live stream is open, Hank is " +
-                    "always listening. Ask anything — if you're not looking " +
-                    "at a car, he'll answer as a normal chat.",
+                "Live capture now opens in on-demand mode. Tap Ask Hank for " +
+                    "a one-off question, or turn on commentary when you want " +
+                    "hands-free spoken guidance.",
         )
         Tip(
             title = "Interrupt him anytime",
@@ -68,9 +68,9 @@ fun TipsScreen(modifier: Modifier = Modifier) {
         Tip(
             title = "Move + show, don't describe",
             body =
-                "If he can't see something clearly, he'll ask for a better " +
-                    "angle. When you reposition and hold still for a second, " +
-                    "he looks again on his own.",
+                "When commentary mode is on, Hank watches for scene changes. " +
+                    "If you reposition and hold still for a second, he can " +
+                    "speak up again without needing another tap.",
         )
         Tip(
             title = "One step at a time",

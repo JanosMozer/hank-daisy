@@ -106,12 +106,12 @@ fun StreamScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatusChip(
-                title = if (streamUiState.hankMode == HankMode.READ_ONLY) "Read-only mode" else "Interactive mode",
+                title = if (streamUiState.hankMode == HankMode.READ_ONLY) "Commentary mode" else "On-demand mode",
                 body =
                     if (streamUiState.hankMode == HankMode.READ_ONLY) {
-                        "Hank keeps watching the scene and folds in only relevant captured speech."
+                        "Hank keeps watching the scene and speaks up automatically when something relevant changes."
                     } else {
-                        "Hank answers direct spoken questions and keeps the turn loop live."
+                        "Hank stays quiet until you tap Ask Hank, so you can record normally without background commentary."
                     },
             )
             if (!streamUiState.pendingReadOnlyContext.isNullOrBlank()) {
@@ -155,7 +155,7 @@ fun StreamScreen(
             isSpeaking = streamUiState.isHankSpeaking,
             readyLabel =
                 if (streamUiState.hankMode == HankMode.READ_ONLY) "Watching scene"
-                else "Hank's listening",
+                else "Quiet capture",
             modifier =
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -181,7 +181,7 @@ fun StreamScreen(
             )
 
             SwitchButton(
-                label = if (streamUiState.hankMode == HankMode.READ_ONLY) "Interactive" else "Read-only",
+                label = if (streamUiState.hankMode == HankMode.READ_ONLY) "Mute Hank" else "Start commentary",
                 onClick = {
                     val nextMode =
                         if (streamUiState.hankMode == HankMode.READ_ONLY) HankMode.INTERACTIVE
