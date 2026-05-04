@@ -84,6 +84,7 @@ class StreamViewModel(
     private const val CLIP_CAPTURE_INTERVAL_MS = 250L
     private const val CLIP_MAX_FRAMES = 24
     private const val CLIP_FPS = 4
+    private const val VIDEO_EVIDENCE_FPS = 24
   }
 
   private data class ClipFrameSample(
@@ -114,15 +115,21 @@ class StreamViewModel(
   private var sceneJob: Job? = null
   private var autonomousJob: Job? = null
   private var readOnlyJob: Job? = null
+  private val videoEvidenceRecorder = FrameRecorder(application.applicationContext)
+  private var videoEvidenceStartedAt: Long = 0L
+  private var videoEvidenceTickerJob: Job? = null
   private var audioEvidenceRecorder: MediaRecorder? = null
   private var audioEvidenceFile: File? = null
   private var audioEvidenceStartedAt: Long = 0L
   private var audioEvidenceTickerJob: Job? = null
   private val rollingClipFrames = ArrayDeque<ClipFrameSample>()
   private var lastClipFrameAt = 0L
+  private var lastVideoFrameWidth = 0
+  private var lastVideoFrameHeight = 0
 
   private val conversationHistory = mutableListOf<GeminiService.Turn>()
   private val pendingReadOnlyNotes = mutableListOf<String>()
+  private var lastSessionSnapshot: Pair<List<ChatMessage>, List<InspectionEvidence>>? = null
   @Volatile private var lastTurnAt: Long = 0L
 
   private val sceneWatcher =
@@ -197,6 +204,10 @@ class StreamViewModel(
   }
 
   private fun startStreamLocked() {
+    lastSessionSnapshot = null
+    lastVideoFrameWidth = 0
+    lastVideoFrameHeight = 0
+    rollingClipFrames.clear()
     videoJob?.cancel()
     stateJob?.cancel()
     errorJob?.cancel()
@@ -472,11 +483,27 @@ class StreamViewModel(
         }
       }
 
+  private fun snapshotCurrentSession() {
+    lastSessionSnapshot =
+        _uiState.value.chatMessages.toList() to _uiState.value.capturedEvidence.toList()
+  }
+
+  fun currentSessionSnapshot(): Pair<List<ChatMessage>, List<InspectionEvidence>> {
+    val state = _uiState.value
+    return if (state.chatMessages.isNotEmpty() || state.capturedEvidence.isNotEmpty()) {
+      state.chatMessages.toList() to state.capturedEvidence.toList()
+    } else {
+      lastSessionSnapshot ?: (emptyList<ChatMessage>() to emptyList())
+    }
+  }
+
   fun stopStream() {
     if (session == null && videoJob == null && teardownJob == null) {
       return
     }
     val sessionToTearDown = session
+    finalizePendingEvidenceCapture()
+    snapshotCurrentSession()
     session = null
     try { videoJob?.cancel() } catch (_: Exception) {}
     videoJob = null
@@ -488,6 +515,10 @@ class StreamViewModel(
     sessionStateJob = null
     try { presentationQueue?.stop() } catch (_: Exception) {}
     presentationQueue = null
+    try { videoEvidenceTickerJob?.cancel() } catch (_: Exception) {}
+    videoEvidenceTickerJob = null
+    runCatching { videoEvidenceRecorder.abort() }
+    videoEvidenceStartedAt = 0L
     try { audioEvidenceTickerJob?.cancel() } catch (_: Exception) {}
     audioEvidenceTickerJob = null
     releaseAudioEvidenceRecorder()
@@ -521,6 +552,9 @@ class StreamViewModel(
     lastTurnAt = 0L
     try { glassesAudio.disableGlassesMic() } catch (_: Exception) {}
     try { StreamForegroundService.stop(getApplication()) } catch (_: Exception) {}
+    lastVideoFrameWidth = 0
+    lastVideoFrameHeight = 0
+    rollingClipFrames.clear()
 
     if (sessionToTearDown != null) {
       teardownJob =
@@ -745,6 +779,14 @@ class StreamViewModel(
     }
   }
 
+  fun toggleVideoEvidenceRecording() {
+    if (_uiState.value.isVideoRecording) {
+      stopVideoEvidenceRecording()
+    } else {
+      startVideoEvidenceRecording()
+    }
+  }
+
   fun toggleAudioEvidenceRecording() {
     if (_uiState.value.isAudioRecording) {
       stopAudioEvidenceRecording()
@@ -754,8 +796,127 @@ class StreamViewModel(
   }
 
   fun finalizePendingEvidenceCapture() {
+    if (_uiState.value.isVideoRecording) {
+      stopVideoEvidenceRecording()
+    }
     if (_uiState.value.isAudioRecording) {
       stopAudioEvidenceRecording()
+    }
+    snapshotCurrentSession()
+  }
+
+  private fun startVideoEvidenceRecording() {
+    if (_uiState.value.isVideoRecording) return
+    if (_uiState.value.streamSessionState != StreamSessionState.STREAMING) {
+      Log.d(TAG, "startVideoEvidenceRecording(): stream is not active")
+      return
+    }
+    if (lastVideoFrameWidth <= 0 || lastVideoFrameHeight <= 0) {
+      Log.d(TAG, "startVideoEvidenceRecording(): no frame dimensions available yet")
+      return
+    }
+    try {
+      videoEvidenceRecorder.start(
+          width = lastVideoFrameWidth,
+          height = lastVideoFrameHeight,
+          fps = VIDEO_EVIDENCE_FPS,
+      )
+      videoEvidenceStartedAt = System.currentTimeMillis()
+      videoEvidenceTickerJob?.cancel()
+      videoEvidenceTickerJob =
+          viewModelScope.launch {
+            while (isActive) {
+              _uiState.update {
+                it.copy(
+                    isVideoRecording = true,
+                    videoRecordingDurationMs =
+                        (System.currentTimeMillis() - videoEvidenceStartedAt).coerceAtLeast(0L),
+                )
+              }
+              delay(250L)
+            }
+          }
+      _uiState.update { it.copy(isVideoRecording = true, videoRecordingDurationMs = 0L) }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to start video evidence recording", e)
+      videoEvidenceTickerJob?.cancel()
+      videoEvidenceTickerJob = null
+      runCatching { videoEvidenceRecorder.abort() }
+      videoEvidenceStartedAt = 0L
+      _uiState.update { it.copy(isVideoRecording = false, videoRecordingDurationMs = 0L) }
+    }
+  }
+
+  private fun stopVideoEvidenceRecording() {
+    if (!_uiState.value.isVideoRecording) {
+      videoEvidenceTickerJob?.cancel()
+      videoEvidenceTickerJob = null
+      videoEvidenceStartedAt = 0L
+      _uiState.update { it.copy(isVideoRecording = false, videoRecordingDurationMs = 0L) }
+      return
+    }
+
+    val startedAt = videoEvidenceStartedAt
+    _uiState.update { it.copy(isVideoRecording = false) }
+    videoEvidenceTickerJob?.cancel()
+    videoEvidenceTickerJob = null
+
+    val durationMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
+    var savedEvidence: InspectionEvidence? = null
+    try {
+      val file = videoEvidenceRecorder.finish()
+      if (file.exists() && file.length() > 0L) {
+        val previewPath = saveVideoEvidencePreview(startedAt)
+        savedEvidence =
+            InspectionEvidence(
+                id = "evidence-video-$startedAt",
+                kind = EvidenceKind.VIDEO,
+                filePath = file.absolutePath,
+                createdAt = startedAt,
+                caption = "Glasses video recording",
+                previewImagePath = previewPath,
+                durationMs = durationMs,
+            )
+      } else {
+        runCatching { file.delete() }
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to finalize video evidence recording", e)
+      runCatching { videoEvidenceRecorder.abort() }
+    } finally {
+      videoEvidenceStartedAt = 0L
+    }
+
+    _uiState.update {
+      it.copy(
+          isVideoRecording = false,
+          videoRecordingDurationMs = 0L,
+          capturedEvidence =
+              if (savedEvidence != null) it.capturedEvidence + savedEvidence else it.capturedEvidence,
+      )
+    }
+  }
+
+  private fun abortVideoEvidenceRecording() {
+    videoEvidenceTickerJob?.cancel()
+    videoEvidenceTickerJob = null
+    videoEvidenceStartedAt = 0L
+    runCatching { videoEvidenceRecorder.abort() }
+    _uiState.update { it.copy(isVideoRecording = false, videoRecordingDurationMs = 0L) }
+  }
+
+  private fun saveVideoEvidencePreview(startedAt: Long): String? {
+    val bitmap = _uiState.value.videoFrame ?: return null
+    return try {
+      val dir = File(getApplication<Application>().cacheDir, "inspection-evidence").apply { mkdirs() }
+      val previewFile = File(dir, "finding-video-preview-$startedAt.jpg")
+      FileOutputStream(previewFile).use { out ->
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+      }
+      previewFile.absolutePath
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to save video evidence preview", e)
+      null
     }
   }
 
@@ -1132,6 +1293,14 @@ class StreamViewModel(
   }
 
   private fun handleVideoFrame(videoFrame: VideoFrame) {
+    lastVideoFrameWidth = videoFrame.width
+    lastVideoFrameHeight = videoFrame.height
+    val recordBuffer =
+        if (_uiState.value.isVideoRecording) {
+          videoFrame.buffer.duplicate().apply { position(0) }
+        } else {
+          null
+        }
     // VideoFrame contains raw I420 video data in a ByteBuffer
     // Use optimized YuvToBitmapConverter for direct I420 to ARGB conversion
     val bitmap =
@@ -1147,6 +1316,19 @@ class StreamViewModel(
       )
       liveStreamServer.sendFrame(bitmap)
       captureClipSample(bitmap)
+      if (recordBuffer != null) {
+        try {
+          videoEvidenceRecorder.recordFrame(
+              i420Buffer = recordBuffer,
+              width = videoFrame.width,
+              height = videoFrame.height,
+              timestampUs = videoFrame.presentationTimeUs,
+          )
+        } catch (e: Exception) {
+          Log.e(TAG, "Video evidence frame recording failed", e)
+          abortVideoEvidenceRecording()
+        }
+      }
     } else {
       Log.e(TAG, "Failed to convert YUV to bitmap")
     }

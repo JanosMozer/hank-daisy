@@ -40,6 +40,7 @@ import com.meta.wearable.dat.externalsampleapps.mpi.session.InspectionEvidence
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.ChatMessage
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.StreamViewModel
 import com.meta.wearable.dat.externalsampleapps.mpi.wearables.WearablesViewModel
+import java.util.Locale
 
 @Composable
 fun StreamScreen(
@@ -61,9 +62,10 @@ fun StreamScreen(
     DisposableEffect(Unit) {
         streamViewModel.startStream()
         onDispose {
-            val snapshot = streamViewModel.uiState.value
-            if (snapshot.chatMessages.isNotEmpty() || snapshot.capturedEvidence.isNotEmpty()) {
-                onSessionEnd(snapshot.chatMessages, snapshot.capturedEvidence)
+            streamViewModel.finalizePendingEvidenceCapture()
+            val (messages, evidence) = streamViewModel.currentSessionSnapshot()
+            if (messages.isNotEmpty() || evidence.isNotEmpty()) {
+                onSessionEnd(messages, evidence)
             }
             streamViewModel.stopStream()
         }
@@ -131,6 +133,20 @@ fun StreamScreen(
                         "Glasses audio path is active."
                 }
             StatusChip(title = "Audio path", body = audioMessage)
+            if (streamUiState.isVideoRecording) {
+                StatusChip(
+                    title = "Video evidence",
+                    body = "Recording glasses video • ${formatDuration(streamUiState.videoRecordingDurationMs)}",
+                    background = Color(0xFF7F1D1D).copy(alpha = 0.88f),
+                )
+            }
+            if (streamUiState.isAudioRecording) {
+                StatusChip(
+                    title = "Audio evidence",
+                    body = "Recording narrated note • ${formatDuration(streamUiState.audioRecordingDurationMs)}",
+                    background = Color(0xFF1D4ED8).copy(alpha = 0.88f),
+                )
+            }
         }
 
         StatusPill(
@@ -199,6 +215,14 @@ fun StreamScreen(
                 )
             }
 
+            VideoEvidenceButton(
+                isRecording = streamUiState.isVideoRecording,
+                onClick = { streamViewModel.toggleVideoEvidenceRecording() },
+                enabled =
+                    streamUiState.streamSessionState == StreamSessionState.STREAMING ||
+                        streamUiState.isVideoRecording,
+            )
+
             CaptureButton(onClick = { streamViewModel.capturePhoto() })
         }
     }
@@ -225,4 +249,11 @@ private fun StatusChip(
             lineHeight = 15.sp,
         )
     }
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = durationMs / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }

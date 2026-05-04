@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -30,12 +31,14 @@ import com.meta.wearable.dat.externalsampleapps.mpi.R
 @Composable
 fun CircleButton(
     onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit,
 ) {
   Button(
       modifier = modifier.aspectRatio(1f),
       onClick = onClick,
+      enabled = enabled,
       colors = ButtonDefaults.buttonColors(containerColor = Color.White),
       shape = CircleShape,
       contentPadding = PaddingValues(0.dp),
@@ -44,8 +47,8 @@ fun CircleButton(
 }
 
 @Composable
-fun CaptureButton(onClick: () -> Unit) {
-  CircleButton(onClick = onClick) {
+fun CaptureButton(onClick: () -> Unit, enabled: Boolean = true) {
+  CircleButton(onClick = onClick, enabled = enabled) {
     Icon(
         imageVector = Icons.Filled.PhotoCamera,
         contentDescription = stringResource(R.string.capture_photo),
@@ -55,8 +58,8 @@ fun CaptureButton(onClick: () -> Unit) {
 }
 
 @Composable
-fun ClipButton(onClick: () -> Unit) {
-  CircleButton(onClick = onClick) {
+fun ClipButton(onClick: () -> Unit, enabled: Boolean = true) {
+  CircleButton(onClick = onClick, enabled = enabled) {
     Icon(
         imageVector = Icons.Filled.FiberManualRecord,
         contentDescription = "Save clip evidence",
@@ -66,8 +69,19 @@ fun ClipButton(onClick: () -> Unit) {
 }
 
 @Composable
-fun AudioEvidenceButton(isRecording: Boolean, onClick: () -> Unit) {
-  CircleButton(onClick = onClick) {
+fun VideoEvidenceButton(isRecording: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
+  CircleButton(onClick = onClick, enabled = enabled) {
+    Icon(
+        imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Videocam,
+        contentDescription = if (isRecording) "Stop video recording" else "Record glasses video",
+        tint = if (isRecording) Color.Red else Color.Black,
+    )
+  }
+}
+
+@Composable
+fun AudioEvidenceButton(isRecording: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
+  CircleButton(onClick = onClick, enabled = enabled) {
     Icon(
         imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
         contentDescription = if (isRecording) "Stop audio evidence" else "Record audio evidence",

@@ -29,6 +29,8 @@ data class StreamUiState(
     val isWakeWordActive: Boolean = false,
     val isHankSpeaking: Boolean = false,
     val hankMode: HankMode = HankMode.INTERACTIVE,
+    val isVideoRecording: Boolean = false,
+    val videoRecordingDurationMs: Long = 0L,
     val isAudioRecording: Boolean = false,
     val audioRecordingDurationMs: Long = 0L,
     val spokenQuestion: String? = null,
