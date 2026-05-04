@@ -1,6 +1,7 @@
 package com.meta.wearable.dat.externalsampleapps.mpi.ui
 
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +31,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.meta.wearable.dat.externalsampleapps.mpi.session.DefaultMpiReportGenerationService
+import com.meta.wearable.dat.externalsampleapps.mpi.session.EvidenceKind
 import com.meta.wearable.dat.externalsampleapps.mpi.session.MpiEvidenceItem
 import com.meta.wearable.dat.externalsampleapps.mpi.session.MpiInspectionStatus
 import com.meta.wearable.dat.externalsampleapps.mpi.session.MpiReport
 import com.meta.wearable.dat.externalsampleapps.mpi.session.MpiReportBuilder
 import com.meta.wearable.dat.externalsampleapps.mpi.session.Session
 import com.meta.wearable.dat.externalsampleapps.mpi.stream.GeminiService
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
@@ -65,6 +70,8 @@ fun InfoReportScreen(
     }
 
     val context = LocalContext.current.applicationContext
+    val exportScope = rememberCoroutineScope()
+    var isExportingPdf by remember { mutableStateOf(false) }
     val mpiReport by produceState(
         initialValue = MpiReportBuilder.build(session),
         key1 = session.id,
@@ -183,6 +190,33 @@ fun InfoReportScreen(
                 minHeight = 118.dp,
             )
         }
+
+        ExportPdfButton(
+            isExporting = isExportingPdf,
+            onClick = {
+                if (isExportingPdf) return@ExportPdfButton
+                val exportData =
+                    report.toPdfExportData(
+                        session = session,
+                        selectedStatuses = selectedStatuses,
+                        measurementEdits = measurementEdits,
+                        technicianNotes = technicianNotes,
+                        inspectionStory = inspectionStory,
+                    )
+                exportScope.launch {
+                    isExportingPdf = true
+                    val shared = MpiReportPdf.exportAndShare(context, exportData)
+                    isExportingPdf = false
+                    if (!shared) {
+                        Toast.makeText(
+                            context,
+                            "Could not export MPI PDF.",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -717,6 +751,140 @@ private fun statusColor(status: UiInspectionStatus): Color =
         UiInspectionStatus.RED -> Color(0xFFDC2626)
         UiInspectionStatus.UNKNOWN -> AppColors.TextMuted
     }
+
+@Composable
+private fun ExportPdfButton(
+    isExporting: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(AppColors.Accent, RoundedCornerShape(16.dp))
+                .clickable(enabled = !isExporting, onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (isExporting) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = AppColors.AccentOn,
+            )
+            Spacer(Modifier.width(9.dp))
+        }
+        Text(
+            text = if (isExporting) "Preparing PDF..." else "Export full MPI PDF",
+            color = AppColors.AccentOn,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+private fun UiMpiReport.toPdfExportData(
+    session: Session,
+    selectedStatuses: Map<String, UiInspectionStatus>,
+    measurementEdits: Map<String, String>,
+    technicianNotes: Map<String, String>,
+    inspectionStory: String,
+): MpiReportPdfData {
+    val sections =
+        sections.map { section ->
+            MpiReportPdfSection(
+                title = section.title,
+                items =
+                    section.items.map { item ->
+                        val status = selectedStatuses[item.id] ?: item.status
+                        val measurementValue = measurementEdits[item.id] ?: item.value
+                        val technicianNote = technicianNotes[item.id].orEmpty()
+                        val includeAuto =
+                            item.autoComment.isNotBlank() ||
+                                item.needsReview ||
+                                status == UiInspectionStatus.YELLOW ||
+                                status == UiInspectionStatus.RED
+                        val includeAdvisor =
+                            item.advisorWording.isNotBlank() ||
+                                status == UiInspectionStatus.YELLOW ||
+                                status == UiInspectionStatus.RED
+                        MpiReportPdfItem(
+                            label = item.label,
+                            status = status.toPdfStatus(),
+                            measurement = measurementValue,
+                            unit = item.unit,
+                            needsReview = item.needsReview,
+                            autoComment =
+                                if (includeAuto) {
+                                    item.autoComment.ifBlank { defaultAutoComment(item, status) }
+                                } else {
+                                    ""
+                                },
+                            technicianNote = technicianNote,
+                            advisorWording =
+                                if (includeAdvisor) {
+                                    item.advisorWording.ifBlank {
+                                        defaultAdvisorWording(item, status, measurementValue)
+                                    }
+                                } else {
+                                    ""
+                                },
+                            photoEvidence =
+                                item.evidence
+                                    .filter { it.type.equals("image", ignoreCase = true) }
+                                    .map { it.toPdfEvidence() },
+                        )
+                    },
+            )
+        }
+    val sessionPhotos =
+        session.evidenceAssets
+            .filter { it.kind == EvidenceKind.IMAGE }
+            .map {
+                MpiReportPdfEvidence(
+                    id = it.id,
+                    caption = it.caption,
+                    filePath = it.filePath,
+                    thumbnailPath = it.previewImagePath,
+                    source = "capture",
+                )
+            }
+    val itemPhotos =
+        sections
+            .flatMap { section -> section.items }
+            .flatMap { item -> item.photoEvidence }
+    val photoEvidence =
+        (itemPhotos + sessionPhotos)
+            .distinctBy { it.filePath ?: it.thumbnailPath ?: it.id }
+
+    return MpiReportPdfData(
+        title = "Multipoint Inspection Report",
+        facts = facts.map { MpiReportPdfFact(it.label, it.value) },
+        conciseDiagnosis = conciseDiagnosis,
+        sections = sections,
+        inspectionStory = inspectionStory,
+        reportStatus = reportStatus,
+        photoEvidence = photoEvidence,
+    )
+}
+
+private fun UiInspectionStatus.toPdfStatus(): MpiReportPdfStatus =
+    when (this) {
+        UiInspectionStatus.GREEN -> MpiReportPdfStatus.GREEN
+        UiInspectionStatus.YELLOW -> MpiReportPdfStatus.YELLOW
+        UiInspectionStatus.RED -> MpiReportPdfStatus.RED
+        UiInspectionStatus.UNKNOWN -> MpiReportPdfStatus.UNKNOWN
+    }
+
+private fun UiEvidence.toPdfEvidence(): MpiReportPdfEvidence =
+    MpiReportPdfEvidence(
+        id = id,
+        caption = caption,
+        filePath = filePath,
+        thumbnailPath = thumbnailPath,
+        source = source,
+    )
 
 private fun MpiReport.toUiMpiReport(): UiMpiReport =
     UiMpiReport(

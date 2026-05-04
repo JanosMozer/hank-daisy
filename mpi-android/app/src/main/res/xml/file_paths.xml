@@ -2,4 +2,5 @@
 <paths>
     <cache-path name="shared_images" path="images/"/>
     <cache-path name="shared_sessions" path="sessions/"/>
+    <cache-path name="mpi_reports" path="mpi-reports/"/>
 </paths>
